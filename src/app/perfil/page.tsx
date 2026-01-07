@@ -1,62 +1,163 @@
 "use client"
-import { useState } from "react"
-import { Scale, Ruler, CircleUser, ChevronRight, Save } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { Save, Dumbbell, Trophy, ArrowRight, Plus, Minus, Droplets, Ruler, Weight } from "lucide-react"
+import { toast } from "sonner"
 
 export default function ProfilePage() {
-    const [loading, setLoading] = useState(false)
+    const [mounted, setMounted] = useState(false)
+    const [username, setUsername] = useState("")
+    const [formData, setFormData] = useState({
+        weight: 80, height: 170, waist: 90, chest: 100, armL: 35, armR: 35, waterMeta: 3000
+    })
+
+    const timerRef = useRef<NodeJS.Timeout | null>(null)
+
+    useEffect(() => {
+        setMounted(true)
+        const user = localStorage.getItem("user_gg")
+        if (!user) {
+            window.location.href = "/"
+        } else {
+            setUsername(user)
+            const saved = localStorage.getItem(`perfil_${user}`)
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                setFormData(parsed.ultimoRegistro || parsed)
+            } else {
+                const legacy = localStorage.getItem(`bio_${user}`)
+                if (legacy) setFormData(JSON.parse(legacy))
+            }
+        }
+    }, [])
+
+    const updateValue = (key: string, step: number) => {
+        setFormData(prev => {
+            const val = Number((prev as any)[key]) || 0
+            return { ...prev, [key]: Math.max(0, parseFloat((val + step).toFixed(1))) }
+        })
+    }
+
+    const startHold = (key: string, step: number) => {
+        stopHold()
+        updateValue(key, step)
+        let speed = 200
+        const run = () => {
+            updateValue(key, step)
+            speed = Math.max(30, speed * 0.85)
+            timerRef.current = setTimeout(run, speed)
+        }
+        timerRef.current = setTimeout(run, 400)
+    }
+
+    const stopHold = () => {
+        if (timerRef.current) {
+            clearTimeout(timerRef.current)
+            timerRef.current = null
+        }
+    }
+
+    const handleSave = () => {
+        const timestamp = new Date().toISOString()
+        const savedProfile = localStorage.getItem(`perfil_${username}`)
+        let profileData = savedProfile ? JSON.parse(savedProfile) : {
+            username,
+            historico: [],
+            config: { waterMeta: formData.waterMeta }
+        }
+
+        const novoRegistro = { data: timestamp, ...formData }
+        profileData.ultimoRegistro = novoRegistro
+        profileData.historico.push(novoRegistro)
+        profileData.config.waterMeta = formData.waterMeta
+
+        localStorage.setItem(`perfil_${username}`, JSON.stringify(profileData))
+        localStorage.setItem(`bio_${username}`, JSON.stringify(formData))
+        localStorage.setItem(`first_setup_${username}`, "done")
+
+        toast.success("Evolução Registrada!")
+        window.location.href = "/dashboard"
+    }
+
+    if (!mounted) return null
+
+    const Control = ({ field, step, label, unit, icon: Icon, isSmall = false }: any) => (
+        <div className={`bg-zinc-900/50 border border-zinc-800 p-3 rounded-[2rem] flex flex-col items-center justify-center ${isSmall ? 'py-2' : 'py-4'}`}>
+            <span className="text-[9px] font-black uppercase text-zinc-500 mb-2 tracking-widest flex items-center gap-1">
+                {Icon && <Icon size={10} />} {label}
+            </span>
+            <div className="flex items-center gap-4">
+                <button onMouseDown={() => startHold(field, -step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-red-500 transition-colors">
+                    <Minus size={14} />
+                </button>
+                <div className="flex flex-col items-center min-w-[60px]">
+                    <span className={`${isSmall ? 'text-xl' : 'text-3xl'} font-black italic text-white`}>{(formData as any)[field]}</span>
+                    <span className="text-[8px] font-bold text-zinc-600 uppercase">{unit}</span>
+                </div>
+                <button onMouseDown={() => startHold(field, step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-green-500 transition-colors">
+                    <Plus size={14} />
+                </button>
+            </div>
+        </div>
+    )
 
     return (
-        <div className="min-h-screen bg-black text-white pb-10">
-            <header className="p-8 flex items-center justify-between max-w-xl mx-auto">
-                <div>
-                    <h2 className="text-3xl font-bold">Meu Perfil</h2>
-                    <p className="text-zinc-500">Configure seus dados iniciais</p>
+        <div className="min-h-screen bg-black text-zinc-300 font-sans selection:bg-green-500/30 overflow-x-hidden">
+            <header className="p-4 flex justify-between items-center border-b border-zinc-900 bg-black/50 backdrop-blur-md sticky top-0 z-50">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center text-black font-black italic shadow-lg shadow-green-500/20">GG</div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white">Bio // {username}</span>
                 </div>
-                <div className="w-12 h-12 bg-green-500 rounded-2xl flex items-center justify-center text-black">
-                    <CircleUser size={28} />
-                </div>
+                <button onClick={handleSave} className="p-2 bg-green-500 text-black rounded-lg hover:scale-105 transition-transform"><Save size={18} /></button>
             </header>
 
-            <main className="px-6 max-w-xl mx-auto space-y-6">
-                <div className="bg-zinc-900 rounded-3xl p-6 border border-zinc-800">
-                    <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-6">Bio Inicial</h3>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-zinc-800 p-4 rounded-2xl">
-                            <div className="flex items-center gap-2 text-zinc-500 mb-2">
-                                <Scale size={16} /> <span className="text-xs font-bold uppercase">Peso</span>
-                            </div>
-                            <input type="number" placeholder="00.0" className="bg-transparent text-2xl font-bold outline-none w-full" />
-                            <span className="text-zinc-600 text-xs font-bold">KG</span>
+            <main className="max-w-4xl mx-auto p-4 lg:p-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8 items-start">
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <Weight size={14} className="text-green-500" />
+                            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Dados Vitais</h2>
                         </div>
-
-                        <div className="bg-zinc-800 p-4 rounded-2xl">
-                            <div className="flex items-center gap-2 text-zinc-500 mb-2">
-                                <Ruler size={16} /> <span className="text-xs font-bold uppercase">Altura</span>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Control field="weight" step={0.1} label="Peso" unit="kg" />
+                            <Control field="height" step={1} label="Altura" unit="cm" />
+                        </div>
+                        <div className="bg-blue-600/5 border border-blue-500/10 p-5 rounded-[2.5rem] relative overflow-hidden group">
+                            <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
+                                <Droplets size={120} />
                             </div>
-                            <input type="number" placeholder="000" className="bg-transparent text-2xl font-bold outline-none w-full" />
-                            <span className="text-zinc-600 text-xs font-bold">CM</span>
+                            <span className="text-blue-400 text-[10px] font-black uppercase mb-4 flex items-center gap-2 italic tracking-widest">
+                                <Droplets size={14} /> Meta de Hidratação
+                            </span>
+                            <div className="flex items-center justify-center gap-8">
+                                <button onMouseDown={() => startHold('waterMeta', -50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all"><Minus size={20} /></button>
+                                <div className="text-center">
+                                    <span className="text-5xl font-black italic text-white leading-none">{formData.waterMeta}</span>
+                                    <p className="text-[9px] font-bold text-blue-500/50 uppercase mt-1">Mililitros / Dia</p>
+                                </div>
+                                <button onMouseDown={() => startHold('waterMeta', 50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all"><Plus size={20} /></button>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div className="bg-zinc-900 rounded-3xl p-6 border border-zinc-800">
-                    <h3 className="text-zinc-400 text-xs font-bold uppercase tracking-widest mb-6">Medidas (CM)</h3>
-
-                    <div className="space-y-3">
-                        {["Cintura", "Peitoral", "Braço Esq.", "Braço Dir."].map((label) => (
-                            <div key={label} className="flex items-center justify-between bg-zinc-800 p-4 rounded-2xl">
-                                <span className="font-bold text-zinc-300">{label}</span>
-                                <input type="number" className="bg-transparent text-right font-bold w-16 outline-none text-green-500" placeholder="0" />
-                            </div>
-                        ))}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <Ruler size={14} className="text-zinc-500" />
+                            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Medidas Corporais</h2>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Control field="waist" step={1} label="Cintura" unit="cm" isSmall />
+                            <Control field="chest" step={1} label="Peitoral" unit="cm" isSmall />
+                            <Control field="armL" step={0.5} label="Braço Esq." unit="cm" isSmall />
+                            <Control field="armR" step={0.5} label="Braço Dir." unit="cm" isSmall />
+                        </div>
+                        <button onClick={handleSave} className="w-full bg-zinc-100 text-black py-5 rounded-[2rem] font-black text-xs uppercase flex items-center justify-center gap-3 hover:bg-green-500 transition-all group mt-2">
+                            Confirmar Evolução <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                        </button>
                     </div>
                 </div>
-
-                <button className="w-full bg-white text-black font-black py-5 rounded-3xl flex items-center justify-center gap-3 hover:bg-zinc-200 transition-all">
-                    <Save size={20} />
-                    SALVAR DADOS DE INÍCIO
-                </button>
+                <div className="mt-8 p-6 bg-zinc-900/20 border border-zinc-800/50 rounded-[2.5rem] text-center">
+                    <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-[0.3em]">Esta ação cria um ponto de controle no seu histórico de 120 dias.</p>
+                </div>
             </main>
         </div>
     )
