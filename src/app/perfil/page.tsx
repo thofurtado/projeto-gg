@@ -61,8 +61,8 @@ export default function ProfilePage() {
 
     const handleSave = async () => {
         const timestamp = new Date().toISOString()
-        const savedProfile = await storage.get(`perfil_${username}`)
         
+        const savedProfile = await storage.get(`perfil_${username}`)
         let profileData = savedProfile ? savedProfile : {
             username,
             historico: [],
@@ -76,10 +76,21 @@ export default function ProfilePage() {
 
         await storage.save(`perfil_${username}`, profileData)
         await storage.save(`bio_${username}`, formData)
+        
+        const localPlano = localStorage.getItem(`plano_120_dias_${username}`)
+        if (localPlano) {
+            try {
+                const planoObj = JSON.parse(localPlano)
+                await storage.save(`plano_120_dias_${username}`, planoObj)
+            } catch (e) {
+                console.error("Erro ao sincronizar plano local")
+            }
+        }
+
         localStorage.setItem(`first_setup_${username}`, "done")
         
-        toast.success("Evolução Sincronizada!")
-        window.location.href = "/dashboard"
+        toast.success("Dados salvos! Vamos configurar seu treino.")
+        window.location.href = "/config-treino"
     }
 
     if (!mounted) return null
@@ -157,7 +168,7 @@ export default function ProfilePage() {
                             <Control field="armR" step={0.5} label="Braço Dir." unit="cm" isSmall />
                         </div>
                         <button onClick={handleSave} className="w-full bg-zinc-100 text-black py-5 rounded-[2rem] font-black text-xs uppercase flex items-center justify-center gap-3 hover:bg-green-500 transition-all group mt-2">
-                            Confirmar Evolução <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                            Próximo Passo <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
                         </button>
                     </div>
                 </div>

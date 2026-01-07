@@ -1,7 +1,8 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
-import { Activity, LayoutGrid, ChevronLeft, ChevronRight, Save, User, Droplets, Plus, Moon, Trophy, Undo, Frown, Meh, Smile, MessageSquare, Notebook, Scale } from "lucide-react"
+import { Activity, LayoutGrid, ChevronLeft, ChevronRight, Save, User, Droplets, Plus, Moon, Trophy, Undo, Frown, Meh, Smile, MessageSquare, Notebook, Scale, Dumbbell } from "lucide-react"
 import { toast } from "sonner"
+import { storage } from "@/lib/storage"
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
@@ -9,15 +10,13 @@ export default function DashboardPage() {
   const [diaVisualizado, setDiaVisualizado] = useState(1)
   const [diaAtualDoSistema, setDiaAtualDoSistema] = useState(1)
 
-  // 1. DADOS CENTRALIZADOS DO USUÁRIO (Perfil e Medidas)
   const [userData, setUserData] = useState({
     username: "",
     notasGerais: "",
     config: { metaAgua: 3000 },
-    medidas: [] as { data: string, peso: number, cintura?: number }[]
+    medidas: [] as any[]
   })
 
-  // 2. DADOS CENTRALIZADOS DO DIA (Evolução Diária)
   const [dadosDoDia, setDadosDoDia] = useState({
     agua: [] as { id: number, vol: number }[],
     sonoHoras: 0,
@@ -30,66 +29,88 @@ export default function DashboardPage() {
   const startTimeRef = useRef<number>(0)
 
   useEffect(() => {
-    setMounted(true)
-    const user = localStorage.getItem("user_gg")
-    if (user) {
-      // Carrega Perfil
-      const p = localStorage.getItem(`plano_120_dias_${user}`)
-      if (p) setPlano(JSON.parse(p))
+    const loadData = async () => {
+      setMounted(true)
+      const user = localStorage.getItem("user_gg")
+      if (user) {
+        const p = await storage.get(`plano_120_dias_${user}`)
+        if (p) setPlano(p)
 
-      const savedUser = localStorage.getItem(`perfil_${user}`)
-      if (savedUser) {
-        setUserData(JSON.parse(savedUser))
+        const savedUser = await storage.get(`perfil_${user}`)
+        if (savedUser) {
+          setUserData({
+            username: user,
+            notasGerais: savedUser.notasGerais || "",
+            config: { metaAgua: savedUser.config?.waterMeta || 3000 },
+            medidas: savedUser.historico || [] 
+          })
+        } else {
+          setUserData(prev => ({ ...prev, username: user }))
+        }
+
+        const d = localStorage.getItem(`dia_atual_treino`)
+        if (d) setDiaAtualDoSistema(parseInt(d))
       } else {
-        setUserData(prev => ({ ...prev, username: user }))
+        window.location.href = "/"
       }
-
-      const d = localStorage.getItem(`dia_atual_treino`)
-      if (d) setDiaAtualDoSistema(parseInt(d))
     }
+    loadData()
   }, [])
 
-  // 3. SINCRONIZADOR DE DADOS POR DIA
   useEffect(() => {
-    if (mounted && userData.username) {
-      const u = userData.username
-      const d = diaVisualizado
-      setDadosDoDia({
-        agua: JSON.parse(localStorage.getItem(`agua_u${u}_d${d}`) || "[]"),
-        sonoHoras: parseInt(localStorage.getItem(`sono_u${u}_d${d}`) || "0"),
-        sonoQualidade: localStorage.getItem(`humor_u${u}_d${d}`),
-        relatorio: localStorage.getItem(`relat_u${u}_d${d}`) || ""
-      })
+    const loadDayData = async () => {
+      if (mounted && userData.username) {
+        const u = userData.username
+        const d = diaVisualizado
+
+        const agua = await storage.get(`agua_u${u}_d${d}`) || []
+        const sono = await storage.get(`sono_u${u}_d${d}`) || "0"
+        const humor = await storage.get(`humor_u${u}_d${d}`)
+        const relat = await storage.get(`relat_u${u}_d${d}`) || ""
+
+        setDadosDoDia({
+          agua,
+          sonoHoras: parseInt(sono),
+          sonoQualidade: humor,
+          relatorio: relat
+        })
+      }
     }
+    loadDayData()
   }, [diaVisualizado, mounted, userData.username])
 
-  const saveToLocal = (key: string, val: any) => {
-    localStorage.setItem(key, typeof val === 'object' ? JSON.stringify(val) : val.toString())
+  const updateDia = async (campo: string, valor: any) => {
+    setDadosDoDia(prev => ({ ...prev, [campo]: valor }))
+    const keyMap: any = { agua: 'agua', sonoHoras: 'sono', sonoQualidade: 'humor', relatorio: 'relat' }
+    await storage.save(`${keyMap[campo]}_u${userData.username}_d${diaVisualizado}`, valor)
   }
 
-  const updateDia = (campo: string, valor: any) => {
-    setDadosDoDia(prev => {
-      const novo = { ...prev, [campo]: valor }
-      const keyMap: any = { agua: 'agua', sonoHoras: 'sono', sonoQualidade: 'humor', relatorio: 'relat' }
-      saveToLocal(`${keyMap[campo]}_u${userData.username}_d${diaVisualizado}`, valor)
-      return novo
-    })
-  }
+  const addMedida = async (peso: number) => {
+    const novaMedida = { data: new Date().toLocaleDateString(), weight: peso }
+    const novoHistorico = [...(userData.medidas || []), novaMedida]
+    
+    const perfilCompleto = await storage.get(`perfil_${userData.username}`) || {}
+    const novoPerfil = {
+      ...perfilCompleto,
+      historico: novoHistorico,
+      ultimoRegistro: { ...perfilCompleto.ultimoRegistro, weight: peso, data: new Date().toISOString() }
+    }
 
-  const addMedida = (peso: number) => {
-    const novaMedida = { data: new Date().toLocaleDateString(), peso }
-    const novoUser = { ...userData, medidas: [...userData.medidas, novaMedida] }
-    setUserData(novoUser)
-    saveToLocal(`perfil_${userData.username}`, novoUser)
+    setUserData(prev => ({ ...prev, medidas: novoHistorico }))
+    await storage.save(`perfil_${userData.username}`, novoPerfil)
     toast.success("Peso registrado!")
   }
 
   const adjustRealizado = (modalidade: string, exIdx: number, step: number) => {
     setPlano((prev: any) => {
+      if (!prev) return prev
       const novoPlano = JSON.parse(JSON.stringify(prev))
-      const ex = novoPlano[modalidade][diaVisualizado - 1].exercicios[exIdx]
-      ex.realizado = Math.max(0, parseFloat(((ex.realizado || 0) + step).toFixed(2)))
-      ex.concluido = true
+      const exerciciosDia = novoPlano[modalidade][diaVisualizado - 1]?.exercicios
+      if (exerciciosDia && exerciciosDia[exIdx]) {
+        const ex = exerciciosDia[exIdx]
+        ex.realizado = Math.max(0, parseFloat(((ex.realizado || 0) + step).toFixed(2)))
+        ex.concluido = true
+      }
       return novoPlano
     })
   }
@@ -110,23 +131,21 @@ export default function DashboardPage() {
 
   const calculateDayScore = (diaIdx: number) => {
     if (!plano || !userData.username) return 0
-    const u = userData.username
-    const d = diaIdx + 1
-
-    const aguaLocal = JSON.parse(localStorage.getItem(`agua_u${u}_d${d}`) || "[]")
-    const totalAgua = aguaLocal.reduce((acc: number, c: any) => acc + c.vol, 0)
-    const sonoLocal = parseInt(localStorage.getItem(`sono_u${u}_d${d}`) || "0")
+    const totalAgua = dadosDoDia.agua.reduce((acc, c) => acc + c.vol, 0)
+    const sonoLocal = dadosDoDia.sonoHoras
 
     let ptsEx = 0, totalEx = 0
     Object.keys(plano).forEach(mod => {
-      plano[mod][diaIdx].exercicios.forEach((e: any) => {
-        totalEx++
-        if (e.concluido) ptsEx += Math.min(e.realizado / e.meta, 1)
-      })
+      if (plano[mod][diaIdx]) {
+        plano[mod][diaIdx].exercicios.forEach((e: any) => {
+          totalEx++
+          if (e.concluido) ptsEx += Math.min(e.realizado / e.meta, 1)
+        })
+      }
     })
 
     const sEx = totalEx > 0 ? (ptsEx / totalEx) * 65 : 0
-    const sAg = totalAgua >= userData.config.metaAgua ? 15 : (totalAgua / userData.config.metaAgua) * 15
+    const sAg = totalAgua >= (userData.config.metaAgua || 3000) ? 15 : (totalAgua / (userData.config.metaAgua || 3000)) * 15
     const sSo = sonoLocal >= 8 ? 20 : (sonoLocal / 8) * 20
     return Math.floor(sEx + sAg + sSo)
   }
@@ -139,25 +158,35 @@ export default function DashboardPage() {
     return `bg-green-800/60 text-green-100 border-green-700/30 ${isSelected ? 'ring-1 ring-white/50 scale-105 z-20' : ''}`
   }
 
-  if (!mounted || !plano) return null
+  if (!mounted) return null
+
+  if (!plano) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center mb-4 animate-pulse">
+          <Dumbbell className="text-zinc-700" />
+        </div>
+        <h2 className="text-white font-black italic uppercase tracking-tighter">Plano não encontrado</h2>
+        <p className="text-zinc-500 text-[10px] uppercase tracking-widest mt-2 mb-6">Você precisa configurar seu perfil primeiro.</p>
+        <button onClick={() => window.location.href = "/perfil"} className="bg-green-500 text-black px-8 py-3 rounded-xl font-black text-[10px] uppercase">Configurar Agora</button>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#050505] text-zinc-300 font-sans selection:bg-green-500/30">
-      <style jsx global>{`::-webkit-scrollbar { width: 4px; height: 4px; } ::-webkit-scrollbar-thumb { background: #18181b; border-radius: 10px; }`}</style>
-
       <header className="max-w-[1800px] mx-auto p-4 flex justify-between items-center border-b border-zinc-900 bg-black/60 backdrop-blur-xl sticky top-0 z-50">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center text-black font-black italic">GG</div>
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">System // <span className="text-zinc-200">@{userData.username}</span></p>
         </div>
         <div className="flex gap-2">
-          <button className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800"><User size={18} /></button>
+          <button onClick={() => window.location.href = "/perfil"} className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 hover:text-green-500 transition-colors"><User size={18} /></button>
           <button className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800"><LayoutGrid size={18} /></button>
         </div>
       </header>
 
       <main className="max-w-[1800px] mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-
         <div className="lg:col-span-4 space-y-4">
           <div className="bg-zinc-900/20 border border-zinc-800/40 p-5 rounded-[2.5rem] backdrop-blur-md">
             <div className="flex items-center justify-between mb-4 bg-black/50 p-2 rounded-2xl border border-zinc-800/50">
@@ -173,7 +202,7 @@ export default function DashboardPage() {
               {Object.keys(plano).map(mod => (
                 <div key={mod} className="space-y-1.5">
                   <p className="text-[8px] font-black uppercase text-zinc-600 ml-2 tracking-widest">{mod}</p>
-                  {plano[mod][diaVisualizado - 1].exercicios.map((ex: any, i: number) => (
+                  {plano[mod][diaVisualizado - 1]?.exercicios.map((ex: any, i: number) => (
                     <div key={i} className="bg-zinc-900/40 p-3 rounded-2xl border border-zinc-800/40 flex items-center justify-between gap-4">
                       <div className="min-w-0 flex-1">
                         <p className="text-[9px] font-bold uppercase text-zinc-400 truncate">{ex.name}</p>
@@ -189,7 +218,7 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-            <button onClick={() => { saveToLocal(`plano_120_dias_${userData.username}`, plano); toast.success("Dados salvos"); }} className="w-full bg-green-500 text-black py-3 rounded-2xl font-black text-[9px] uppercase mt-4 flex items-center justify-center gap-2">Sincronizar Dados <Save size={14} /></button>
+            <button onClick={async () => { await storage.save(`plano_120_dias_${userData.username}`, plano); toast.success("Sincronizado com Nuvem"); }} className="w-full bg-green-500 text-black py-3 rounded-2xl font-black text-[9px] uppercase mt-4 flex items-center justify-center gap-2">Sincronizar Dados <Save size={14} /></button>
           </div>
 
           <div className="bg-zinc-900/10 border border-zinc-800/40 p-5 rounded-[2rem]">
@@ -220,7 +249,7 @@ export default function DashboardPage() {
                   ))}
                 </div>
                 <div className="space-y-3">
-                  {Object.keys(plano).map(mod => plano[mod][0].exercicios.map((baseEx: any, exIdx: number) => (
+                  {Object.keys(plano).map(mod => plano[mod][0]?.exercicios.map((baseEx: any, exIdx: number) => (
                     <div key={`${mod}-${exIdx}`} className="flex items-center gap-4">
                       <div className="w-[120px] text-[9px] font-black uppercase text-zinc-600 truncate">{baseEx.name}</div>
                       <div className="flex gap-1.5">
@@ -243,10 +272,10 @@ export default function DashboardPage() {
             </div>
             <textarea
               value={userData.notasGerais}
-              onChange={(e) => {
+              onChange={async (e) => {
                 const n = { ...userData, notasGerais: e.target.value };
                 setUserData(n);
-                saveToLocal(`perfil_${userData.username}`, n);
+                await storage.save(`perfil_${userData.username}`, n);
               }}
               className="w-full h-16 bg-zinc-900/20 rounded-2xl p-4 text-xs text-zinc-500 outline-none border border-zinc-800/30"
               placeholder="Lembretes fixos para todos os dias..."
@@ -288,8 +317,8 @@ export default function DashboardPage() {
               if (p) addMedida(parseFloat(p));
             }} className="w-full bg-zinc-800 text-white py-2.5 rounded-xl font-black text-[9px] uppercase">Registrar Peso</button>
             <div className="mt-3 space-y-1">
-              {userData.medidas.slice(-2).map((m, idx) => (
-                <p key={idx} className="text-[8px] font-bold text-zinc-600 uppercase">{m.data}: {m.peso}kg</p>
+              {(userData.medidas || []).slice(-2).map((m, idx) => (
+                <p key={idx} className="text-[8px] font-bold text-zinc-600 uppercase">{m.data}: {m.weight || m.peso}kg</p>
               ))}
             </div>
           </div>
