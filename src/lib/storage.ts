@@ -1,37 +1,45 @@
 export const storage = {
   async save(key: string, data: any) {
+    if (typeof window === 'undefined') return
+
+    // Salva localmente primeiro
     localStorage.setItem(key, JSON.stringify(data))
 
-    if (process.env.NODE_ENV === 'production') {
-      try {
-        await fetch('/api/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key, data })
-        })
-      } catch (e) {
-        console.error("Erro ao sincronizar com Redis", e)
-      }
+    // Tenta sincronizar com o Redis (sempre que possível)
+    try {
+      await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, data })
+      })
+    } catch (e) {
+      console.error("Erro ao sincronizar com Redis:", e)
     }
   },
 
   async get(key: string) {
-    if (process.env.NODE_ENV === 'production') {
-      try {
-        const res = await fetch(`/api/sync?key=${key}`)
-        if (res.ok) {
-          const serverData = await res.json()
-          if (serverData) {
-            localStorage.setItem(key, JSON.stringify(serverData))
-            return serverData
-          }
+    if (typeof window === 'undefined') return null
+
+    // Tenta buscar do Redis primeiro para garantir que guia anônima/celular funcione
+    try {
+      const res = await fetch(`/api/sync?key=${key}`)
+      if (res.ok) {
+        const serverData = await res.json()
+        if (serverData !== null && serverData !== undefined) {
+          localStorage.setItem(key, JSON.stringify(serverData))
+          return serverData
         }
-      } catch (e) {
-        console.error("Erro ao buscar do Redis", e)
       }
+    } catch (e) {
+      console.warn("Erro ao buscar do Redis, usando LocalStorage:", e)
     }
 
+    // Fallback para LocalStorage
     const local = localStorage.getItem(key)
-    return local ? JSON.parse(local) : null
+    try {
+      return local ? JSON.parse(local) : null
+    } catch (e) {
+      return null
+    }
   }
 }
