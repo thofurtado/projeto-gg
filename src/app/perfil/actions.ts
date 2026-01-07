@@ -1,15 +1,21 @@
 'use server'
-import redis from '@/lib/redis'
+import { redis } from '@/lib/redis'
 import { revalidatePath } from 'next/cache'
 
 export async function saveProfileAction(formData: any) {
-  const username = "admin" // Por enquanto fixo, depois pegaremos da sessão
-  
-  // Criamos uma chave única para o perfil do usuário
-  const key = `user:${username}:profile`
-  
-  await redis.set(key, JSON.stringify(formData))
-  
-  revalidatePath('/perfil')
-  return { success: true }
+    try {
+        if (!redis) {
+            return { error: "Banco de dados não configurado." }
+        }
+
+        const { username, data } = formData
+        const profileKey = `perfil:${username}`
+
+        await redis.set(profileKey, JSON.stringify(data))
+        
+        revalidatePath('/dashboard')
+        return { success: true }
+    } catch (err) {
+        return { error: "Erro ao salvar no banco de dados." }
+    }
 }
