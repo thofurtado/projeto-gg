@@ -1,7 +1,8 @@
 "use client"
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
-import { Dumbbell, LogIn, UserPlus, Eye, EyeOff } from "lucide-react"
+import { Dumbbell, LogIn, UserPlus, Eye, EyeOff, Loader2 } from "lucide-react"
+import { storage } from "@/lib/storage"
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true)
@@ -10,46 +11,66 @@ export default function AuthPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => { setMounted(true) }, [])
 
-  const handleAuth = (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
+    setLoading(true)
 
-    const storedUsers = JSON.parse(localStorage.getItem("gg_users") || "[]")
     const lowerUser = username.toLowerCase().trim()
 
-    if (isLogin) {
-      const user = storedUsers.find((u: any) => u.username === lowerUser && u.password === password)
+    try {
+      // Busca a lista de usuários (Tenta Redis se produção, senão Local)
+      const storedUsers = await storage.get("gg_users") || []
 
-      if (user) {
-        localStorage.setItem("user_gg", lowerUser)
-        toast.success("Bem-vindo de volta!")
-        window.location.href = "/perfil"
+      if (isLogin) {
+        const user = storedUsers.find((u: any) => u.username === lowerUser && u.password === password)
+
+        if (user) {
+          localStorage.setItem("user_gg", lowerUser)
+          toast.success("Bem-vindo de volta!")
+          window.location.href = "/dashboard"
+        } else {
+          toast.error("Usuário ou senha incorretos")
+        }
       } else {
-        toast.error("Usuário ou senha incorretos")
-      }
-    } else {
-      if (password !== confirmPassword) {
-        return toast.error("As senhas não coincidem")
-      }
+        if (password !== confirmPassword) {
+          setLoading(false)
+          return toast.error("As senhas não coincidem")
+        }
 
-      if (storedUsers.find((u: any) => u.username === lowerUser)) {
-        return toast.error("Este usuário já existe")
+        if (storedUsers.find((u: any) => u.username === lowerUser)) {
+          setLoading(false)
+          return toast.error("Este usuário já existe")
+        }
+
+        const newUser = {
+          username: lowerUser,
+          password,
+          createdAt: new Date().toISOString()
+        }
+
+        const updatedUsers = [...storedUsers, newUser]
+
+        // Salva a lista de usuários e cria o perfil inicial
+        await storage.save("gg_users", updatedUsers)
+        await storage.save(`perfil_${lowerUser}`, {
+          username: lowerUser,
+          config: { waterMeta: 3000 },
+          ultimoRegistro: { weight: 0, height: 0, waist: 0, chest: 0, armL: 0, armR: 0 },
+          historico: []
+        })
+
+        localStorage.setItem("user_gg", lowerUser)
+        toast.success("Conta criada com sucesso!")
+        window.location.href = "/perfil"
       }
-
-      const newUser = {
-        username: lowerUser,
-        password,
-        createdAt: new Date().toISOString()
-      }
-
-      storedUsers.push(newUser)
-      localStorage.setItem("gg_users", JSON.stringify(storedUsers))
-      localStorage.setItem("user_gg", lowerUser)
-
-      toast.success("Conta criada com sucesso!")
-      window.location.href = "/perfil"
+    } catch (err) {
+      toast.error("Erro ao conectar com o servidor")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -108,21 +129,15 @@ export default function AuthPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-5 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 transition-colors"
-              >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
             </div>
           )}
 
           <button
             type="submit"
-            className="w-full bg-green-500 hover:bg-green-400 text-black font-black py-5 rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs uppercase tracking-widest shadow-lg shadow-green-500/10 mt-6"
+            disabled={loading}
+            className="w-full bg-green-500 hover:bg-green-400 text-black font-black py-5 rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-xs uppercase tracking-widest shadow-lg shadow-green-500/10 mt-6 disabled:opacity-50"
           >
-            {isLogin ? <><LogIn size={18} /> Entrar no Sistema</> : <><UserPlus size={18} /> Iniciar Jornada</>}
+            {loading ? <Loader2 className="animate-spin" size={18} /> : (isLogin ? <><LogIn size={18} /> Entrar no Sistema</> : <><UserPlus size={18} /> Iniciar Jornada</>)}
           </button>
         </form>
 
@@ -141,7 +156,7 @@ export default function AuthPage() {
         </button>
       </div>
 
-      <p className="mt-8 text-[8px] font-black text-zinc-800 uppercase tracking-[0.5em]">Central de Comando // v1.0.2</p>
+      <p className="mt-8 text-[8px] font-black text-zinc-800 uppercase tracking-[0.5em]">Central de Comando // v1.0.3</p>
     </div>
   )
 }
