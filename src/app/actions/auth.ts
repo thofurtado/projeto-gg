@@ -1,10 +1,14 @@
 'use server'
-import redis from '@/lib/redis'
+import { redis } from '@/lib/redis'
 
 export async function authAction(formData: any, mode: 'login' | 'signup') {
     try {
         const { username, password } = formData
         const userKey = `user:${username.toLowerCase().trim()}:auth`
+
+        if (!redis) {
+            return { error: "Banco de dados não configurado." }
+        }
 
         const data = await redis.get(userKey)
 

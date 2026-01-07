@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Save, Dumbbell, Trophy, ArrowRight, Plus, Minus, Droplets, Ruler, Weight } from "lucide-react"
 import { toast } from "sonner"
+import { storage } from "@/lib/storage"
 
 export default function ProfilePage() {
     const [mounted, setMounted] = useState(false)
@@ -13,21 +14,23 @@ export default function ProfilePage() {
     const timerRef = useRef<NodeJS.Timeout | null>(null)
 
     useEffect(() => {
-        setMounted(true)
-        const user = localStorage.getItem("user_gg")
-        if (!user) {
-            window.location.href = "/"
-        } else {
-            setUsername(user)
-            const saved = localStorage.getItem(`perfil_${user}`)
-            if (saved) {
-                const parsed = JSON.parse(saved)
-                setFormData(parsed.ultimoRegistro || parsed)
+        const initProfile = async () => {
+            setMounted(true)
+            const user = localStorage.getItem("user_gg")
+            if (!user) { 
+                window.location.href = "/" 
             } else {
-                const legacy = localStorage.getItem(`bio_${user}`)
-                if (legacy) setFormData(JSON.parse(legacy))
+                setUsername(user)
+                const saved = await storage.get(`perfil_${user}`)
+                if (saved) {
+                    setFormData(saved.ultimoRegistro || saved)
+                } else {
+                    const legacy = await storage.get(`bio_${user}`)
+                    if (legacy) setFormData(legacy)
+                }
             }
         }
+        initProfile()
     }, [])
 
     const updateValue = (key: string, step: number) => {
@@ -40,26 +43,27 @@ export default function ProfilePage() {
     const startHold = (key: string, step: number) => {
         stopHold()
         updateValue(key, step)
-        let speed = 200
+        let speed = key === 'weight' ? 120 : 200
         const run = () => {
             updateValue(key, step)
-            speed = Math.max(30, speed * 0.85)
+            speed = Math.max(key === 'weight' ? 15 : 30, speed * 0.80)
             timerRef.current = setTimeout(run, speed)
         }
-        timerRef.current = setTimeout(run, 400)
+        timerRef.current = setTimeout(run, key === 'weight' ? 250 : 400)
     }
 
-    const stopHold = () => {
+    const stopHold = () => { 
         if (timerRef.current) {
             clearTimeout(timerRef.current)
             timerRef.current = null
         }
     }
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const timestamp = new Date().toISOString()
-        const savedProfile = localStorage.getItem(`perfil_${username}`)
-        let profileData = savedProfile ? JSON.parse(savedProfile) : {
+        const savedProfile = await storage.get(`perfil_${username}`)
+        
+        let profileData = savedProfile ? savedProfile : {
             username,
             historico: [],
             config: { waterMeta: formData.waterMeta }
@@ -70,11 +74,11 @@ export default function ProfilePage() {
         profileData.historico.push(novoRegistro)
         profileData.config.waterMeta = formData.waterMeta
 
-        localStorage.setItem(`perfil_${username}`, JSON.stringify(profileData))
-        localStorage.setItem(`bio_${username}`, JSON.stringify(formData))
+        await storage.save(`perfil_${username}`, profileData)
+        await storage.save(`bio_${username}`, formData)
         localStorage.setItem(`first_setup_${username}`, "done")
-
-        toast.success("Evolução Registrada!")
+        
+        toast.success("Evolução Sincronizada!")
         window.location.href = "/dashboard"
     }
 
@@ -86,14 +90,14 @@ export default function ProfilePage() {
                 {Icon && <Icon size={10} />} {label}
             </span>
             <div className="flex items-center gap-4">
-                <button onMouseDown={() => startHold(field, -step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-red-500 transition-colors">
+                <button onMouseDown={() => startHold(field, -step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-red-500 transition-colors shrink-0">
                     <Minus size={14} />
                 </button>
-                <div className="flex flex-col items-center min-w-[60px]">
+                <div className="flex flex-col items-center min-w-[70px]">
                     <span className={`${isSmall ? 'text-xl' : 'text-3xl'} font-black italic text-white`}>{(formData as any)[field]}</span>
                     <span className="text-[8px] font-bold text-zinc-600 uppercase">{unit}</span>
                 </div>
-                <button onMouseDown={() => startHold(field, step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-green-500 transition-colors">
+                <button onMouseDown={() => startHold(field, step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-green-500 transition-colors shrink-0">
                     <Plus size={14} />
                 </button>
             </div>
@@ -128,13 +132,15 @@ export default function ProfilePage() {
                             <span className="text-blue-400 text-[10px] font-black uppercase mb-4 flex items-center gap-2 italic tracking-widest">
                                 <Droplets size={14} /> Meta de Hidratação
                             </span>
-                            <div className="flex items-center justify-center gap-8">
-                                <button onMouseDown={() => startHold('waterMeta', -50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all"><Minus size={20} /></button>
-                                <div className="text-center">
-                                    <span className="text-5xl font-black italic text-white leading-none">{formData.waterMeta}</span>
+                            <div className="flex items-center justify-center gap-4">
+                                <button onMouseDown={() => startHold('waterMeta', -50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all shrink-0"><Minus size={20} /></button>
+                                <div className="text-center w-[120px]">
+                                    <span className="text-5xl font-black italic text-white leading-none inline-block">
+                                        {formData.waterMeta.toString().padStart(4, '0')}
+                                    </span>
                                     <p className="text-[9px] font-bold text-blue-500/50 uppercase mt-1">Mililitros / Dia</p>
                                 </div>
-                                <button onMouseDown={() => startHold('waterMeta', 50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all"><Plus size={20} /></button>
+                                <button onMouseDown={() => startHold('waterMeta', 50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all shrink-0"><Plus size={20} /></button>
                             </div>
                         </div>
                     </div>
@@ -154,9 +160,6 @@ export default function ProfilePage() {
                             Confirmar Evolução <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
                         </button>
                     </div>
-                </div>
-                <div className="mt-8 p-6 bg-zinc-900/20 border border-zinc-800/50 rounded-[2.5rem] text-center">
-                    <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-[0.3em]">Esta ação cria um ponto de controle no seu histórico de 120 dias.</p>
                 </div>
             </main>
         </div>
