@@ -64,13 +64,13 @@ export default function ProfilePage() {
     const startHold = (key: string, step: number) => {
         stopHold()
         updateValue(key, step)
-        let speed = key === 'weight' ? 120 : 200
+        let speed = 200
         const run = () => {
             updateValue(key, step)
-            speed = Math.max(key === 'weight' ? 15 : 30, speed * 0.80)
+            speed = Math.max(30, speed * 0.85)
             timerRef.current = setTimeout(run, speed)
         }
-        timerRef.current = setTimeout(run, key === 'weight' ? 250 : 400)
+        timerRef.current = setTimeout(run, 500)
     }
 
     const stopHold = () => {
@@ -94,12 +94,12 @@ export default function ProfilePage() {
 
             const novoRegistro = {
                 data: timestamp,
-                weight: formData.weight,
-                height: formData.height,
-                waist: formData.waist,
-                chest: formData.chest,
-                armL: formData.armL,
-                armR: formData.armR
+                weight: Number(formData.weight),
+                height: Number(formData.height),
+                waist: Number(formData.waist),
+                chest: Number(formData.chest),
+                armL: Number(formData.armL),
+                armR: Number(formData.armR)
             }
 
             profileData.ultimoRegistro = novoRegistro
@@ -108,16 +108,11 @@ export default function ProfilePage() {
             profileData.historico.push(novoRegistro)
 
             if (!profileData.config) profileData.config = { waterMeta: 3000 }
-            profileData.config.waterMeta = formData.waterMeta
+            profileData.config.waterMeta = Number(formData.waterMeta)
 
             await storage.save(`perfil_${username}`, profileData)
             await storage.save(`bio_${username}`, formData)
             await storage.save(`first_setup_${username}`, "done")
-
-            const localPlano = await storage.get(`plano_120_dias_${username}`)
-            if (localPlano) {
-                await storage.save(`plano_120_dias_${username}`, localPlano)
-            }
 
             toast.success("Dados salvos! Vamos configurar seu treino.")
             window.location.href = "/config-treino"
@@ -146,7 +141,12 @@ export default function ProfilePage() {
                     <Minus size={14} />
                 </button>
                 <div className="flex flex-col items-center min-w-[70px]">
-                    <span className={`${isSmall ? 'text-xl' : 'text-3xl'} font-black italic text-white`}>{(formData as any)[field] || 0}</span>
+                    <input
+                        type="number"
+                        value={(formData as any)[field]}
+                        onChange={(e) => setFormData(prev => ({ ...prev, [field]: parseFloat(e.target.value) || 0 }))}
+                        className={`w-full bg-transparent border-none text-center outline-none ${isSmall ? 'text-xl' : 'text-3xl'} font-black italic text-white p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                    />
                     <span className="text-[8px] font-bold text-zinc-600 uppercase">{unit}</span>
                 </div>
                 <button onTouchStart={() => startHold(field, step)} onTouchEnd={stopHold} onMouseDown={() => startHold(field, step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-green-500 transition-colors shrink-0">
@@ -187,9 +187,12 @@ export default function ProfilePage() {
                             <div className="flex items-center justify-center gap-4">
                                 <button onTouchStart={() => startHold('waterMeta', -50)} onTouchEnd={stopHold} onMouseDown={() => startHold('waterMeta', -50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all shrink-0"><Minus size={20} /></button>
                                 <div className="text-center w-[120px]">
-                                    <span className="text-5xl font-black italic text-white leading-none inline-block">
-                                        {(formData.waterMeta || 3000).toString().padStart(4, '0')}
-                                    </span>
+                                    <input
+                                        type="number"
+                                        value={formData.waterMeta}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, waterMeta: parseInt(e.target.value) || 0 }))}
+                                        className="w-full bg-transparent border-none text-center outline-none text-5xl font-black italic text-white leading-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
                                     <p className="text-[9px] font-bold text-blue-500/50 uppercase mt-1">Mililitros / Dia</p>
                                 </div>
                                 <button onTouchStart={() => startHold('waterMeta', 50)} onTouchEnd={stopHold} onMouseDown={() => startHold('waterMeta', 50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all shrink-0"><Plus size={20} /></button>
