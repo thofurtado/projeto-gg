@@ -28,10 +28,21 @@ export default function ProfilePage() {
             try {
                 const saved = await storage.get(`perfil_${user}`)
                 if (saved) {
-                    setFormData(saved.ultimoRegistro || saved)
+                    const baseData = saved.ultimoRegistro || {}
+                    const configData = saved.config || {}
+
+                    setFormData({
+                        weight: baseData.weight || 80,
+                        height: baseData.height || 170,
+                        waist: baseData.waist || 90,
+                        chest: baseData.chest || 100,
+                        armL: baseData.armL || 35,
+                        armR: baseData.armR || 35,
+                        waterMeta: configData.waterMeta || baseData.waterMeta || 3000
+                    })
                 } else {
                     const legacy = await storage.get(`bio_${user}`)
-                    if (legacy) setFormData(legacy)
+                    if (legacy) setFormData(prev => ({ ...prev, ...legacy }))
                 }
             } catch (err) {
                 console.error("Erro ao carregar perfil")
@@ -81,7 +92,16 @@ export default function ProfilePage() {
                 config: { waterMeta: formData.waterMeta }
             }
 
-            const novoRegistro = { data: timestamp, ...formData }
+            const novoRegistro = {
+                data: timestamp,
+                weight: formData.weight,
+                height: formData.height,
+                waist: formData.waist,
+                chest: formData.chest,
+                armL: formData.armL,
+                armR: formData.armR
+            }
+
             profileData.ultimoRegistro = novoRegistro
 
             if (!profileData.historico) profileData.historico = []
@@ -126,7 +146,7 @@ export default function ProfilePage() {
                     <Minus size={14} />
                 </button>
                 <div className="flex flex-col items-center min-w-[70px]">
-                    <span className={`${isSmall ? 'text-xl' : 'text-3xl'} font-black italic text-white`}>{(formData as any)[field]}</span>
+                    <span className={`${isSmall ? 'text-xl' : 'text-3xl'} font-black italic text-white`}>{(formData as any)[field] || 0}</span>
                     <span className="text-[8px] font-bold text-zinc-600 uppercase">{unit}</span>
                 </div>
                 <button onTouchStart={() => startHold(field, step)} onTouchEnd={stopHold} onMouseDown={() => startHold(field, step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-green-500 transition-colors shrink-0">
@@ -168,7 +188,7 @@ export default function ProfilePage() {
                                 <button onTouchStart={() => startHold('waterMeta', -50)} onTouchEnd={stopHold} onMouseDown={() => startHold('waterMeta', -50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all shrink-0"><Minus size={20} /></button>
                                 <div className="text-center w-[120px]">
                                     <span className="text-5xl font-black italic text-white leading-none inline-block">
-                                        {formData.waterMeta.toString().padStart(4, '0')}
+                                        {(formData.waterMeta || 3000).toString().padStart(4, '0')}
                                     </span>
                                     <p className="text-[9px] font-bold text-blue-500/50 uppercase mt-1">Mililitros / Dia</p>
                                 </div>
