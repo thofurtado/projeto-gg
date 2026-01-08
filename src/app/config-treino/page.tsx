@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react"
 import { ChevronLeft, Trash2, Trophy, TrendingUp, Flag, Plus, Settings2, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { storage } from "@/lib/storage"
 
 interface Exercise {
   name: string
@@ -26,14 +27,19 @@ export default function ConfigTreinoPage() {
   const startTimeRef = useRef<number>(0)
 
   useEffect(() => {
-    setMounted(true)
-    const user = localStorage.getItem("user_gg")
-    if (!user) window.location.href = "/"
-    else {
+    const init = async () => {
+      if (typeof window === 'undefined') return
+      const user = localStorage.getItem("user_gg")
+      if (!user) {
+        window.location.href = "/"
+        return
+      }
       setUsername(user)
-      const saved = localStorage.getItem(`metas_v3_${user}`)
-      if (saved) setSelectedGroups(JSON.parse(saved))
+      const saved = await storage.get(`metas_v3_${user}`)
+      if (saved) setSelectedGroups(saved)
+      setMounted(true)
     }
+    init()
   }, [])
 
   const solvePhysics = (exs: Exercise[], field: 'current' | 'target', lastType: string) => {
@@ -114,10 +120,10 @@ export default function ConfigTreinoPage() {
     }))
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsGenerating(true)
     const plano120Dias: any = {}
-    
+
     selectedGroups.forEach(group => {
       plano120Dias[group.type] = []
       for (let dia = 1; dia <= 120; dia++) {
@@ -138,15 +144,20 @@ export default function ConfigTreinoPage() {
       }
     })
 
-    localStorage.setItem(`plano_120_dias_${username}`, JSON.stringify(plano120Dias))
-    localStorage.setItem(`metas_v3_${username}`, JSON.stringify(selectedGroups))
-    localStorage.setItem(`dia_atual_treino`, "1")
+    try {
+      await storage.save(`plano_120_dias_${username}`, plano120Dias)
+      await storage.save(`metas_v3_${username}`, selectedGroups)
+      await storage.save(`dia_atual_treino_${username}`, "1")
 
-    setTimeout(() => {
-      setIsGenerating(false)
       toast.success("Evolução Forjada!")
-      window.location.href = "/dashboard"
-    }, 3000)
+      setTimeout(() => {
+        window.location.href = "/dashboard"
+      }, 1000)
+    } catch (error) {
+      toast.error("Erro ao salvar no servidor.")
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   if (!mounted) return null
@@ -172,7 +183,7 @@ export default function ConfigTreinoPage() {
           <div key={group.id} className="bg-zinc-900 rounded-[32px] border border-zinc-800 p-6 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-black uppercase italic text-green-500">{group.type}</h3>
-              <button onClick={() => setSelectedGroups(selectedGroups.filter(g => g.id !== group.id))} className="text-zinc-700 hover:text-red-500"><Trash2 size={20}/></button>
+              <button onClick={() => setSelectedGroups(selectedGroups.filter(g => g.id !== group.id))} className="text-zinc-700 hover:text-red-500"><Trash2 size={20} /></button>
             </div>
             <div className="space-y-4">
               {group.exercises.map((ex, idx) => (
@@ -192,7 +203,7 @@ export default function ConfigTreinoPage() {
                     {(['current', 'target'] as const).map((field) => (
                       <div key={field} className="space-y-2">
                         <label className="text-[9px] font-black uppercase text-zinc-600 flex items-center gap-1 italic">
-                          {field === 'current' ? <TrendingUp size={10}/> : <Flag size={10}/>} {field === 'current' ? 'Hoje' : 'Meta'}
+                          {field === 'current' ? <TrendingUp size={10} /> : <Flag size={10} />} {field === 'current' ? 'Hoje' : 'Meta'}
                         </label>
                         <div className={`flex items-center justify-between rounded-2xl p-2 border ${field === 'current' ? 'bg-zinc-900 border-zinc-800' : 'bg-green-500/5 border-green-500/20'}`}>
                           <button onMouseDown={() => startHold(group.id, idx, field, -1)} onMouseUp={stopHold} onMouseLeave={stopHold} onTouchStart={(e) => { e.preventDefault(); startHold(group.id, idx, field, -1) }} onTouchEnd={stopHold} className="w-10 h-10 rounded-xl flex items-center justify-center font-bold bg-zinc-800">-</button>
@@ -207,7 +218,7 @@ export default function ConfigTreinoPage() {
                   </div>
                 </div>
               ))}
-              <button onClick={() => addExercise(group.id)} className="w-full py-4 border-2 border-dashed border-zinc-800 rounded-[24px] flex items-center justify-center gap-2 text-zinc-600 font-black text-[10px] uppercase hover:border-green-500 transition-all"><Plus size={16}/> Novo Exercício</button>
+              <button onClick={() => addExercise(group.id)} className="w-full py-4 border-2 border-dashed border-zinc-800 rounded-[24px] flex items-center justify-center gap-2 text-zinc-600 font-black text-[10px] uppercase hover:border-green-500 transition-all"><Plus size={16} /> Novo Exercício</button>
             </div>
           </div>
         ))}

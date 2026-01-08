@@ -13,16 +13,25 @@ export default function AuthPage() {
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    setMounted(true)
+    const user = localStorage.getItem("user_gg")
+    if (user) window.location.href = "/dashboard"
+  }, [])
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loading) return
     setLoading(true)
 
-    const lowerUser = username.toLowerCase().trim()
+    const lowerUser = username.toLowerCase().trim().replace(/\s+/g, '')
+
+    if (lowerUser.length < 3) {
+      setLoading(false)
+      return toast.error("Usuário muito curto")
+    }
 
     try {
-      // Busca a lista de usuários (Tenta Redis se produção, senão Local)
       const storedUsers = await storage.get("gg_users") || []
 
       if (isLogin) {
@@ -30,12 +39,17 @@ export default function AuthPage() {
 
         if (user) {
           localStorage.setItem("user_gg", lowerUser)
-          toast.success("Bem-vindo de volta!")
+          toast.success("Acesso autorizado!")
           window.location.href = "/dashboard"
         } else {
-          toast.error("Usuário ou senha incorretos")
+          toast.error("Credenciais inválidas")
         }
       } else {
+        if (password.length < 4) {
+          setLoading(false)
+          return toast.error("Senha deve ter ao menos 4 dígitos")
+        }
+
         if (password !== confirmPassword) {
           setLoading(false)
           return toast.error("As senhas não coincidem")
@@ -43,7 +57,7 @@ export default function AuthPage() {
 
         if (storedUsers.find((u: any) => u.username === lowerUser)) {
           setLoading(false)
-          return toast.error("Este usuário já existe")
+          return toast.error("Identidade já registrada")
         }
 
         const newUser = {
@@ -54,7 +68,6 @@ export default function AuthPage() {
 
         const updatedUsers = [...storedUsers, newUser]
 
-        // Salva a lista de usuários e cria o perfil inicial
         await storage.save("gg_users", updatedUsers)
         await storage.save(`perfil_${lowerUser}`, {
           username: lowerUser,
@@ -64,11 +77,12 @@ export default function AuthPage() {
         })
 
         localStorage.setItem("user_gg", lowerUser)
-        toast.success("Conta criada com sucesso!")
+        toast.success("Perfil forjado com sucesso!")
         window.location.href = "/perfil"
       }
     } catch (err) {
-      toast.error("Erro ao conectar com o servidor")
+      console.error(err)
+      toast.error("Falha na conexão com o servidor")
     } finally {
       setLoading(false)
     }
@@ -83,8 +97,8 @@ export default function AuthPage() {
           <div className="bg-green-500 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[0_0_30px_rgba(34,197,94,0.2)]">
             <Dumbbell className="text-black" size={32} />
           </div>
-          <h1 className="text-4xl font-black italic text-green-500 tracking-tighter uppercase">Projeto GG</h1>
-          <p className="text-zinc-500 text-[10px] font-black mt-2 uppercase tracking-[0.3em]">
+          <h1 className="text-4xl font-black italic text-green-500 tracking-tighter uppercase leading-none">Projeto GG</h1>
+          <p className="text-zinc-500 text-[10px] font-black mt-3 uppercase tracking-[0.3em]">
             {isLogin ? "Acesso Membro" : "Novo Recruta"}
           </p>
         </div>
@@ -95,7 +109,8 @@ export default function AuthPage() {
               type="text"
               placeholder="NOME DE USUÁRIO"
               required
-              className="w-full bg-black/40 border border-zinc-800 rounded-2xl px-6 py-4 outline-none focus:border-green-500/50 font-black transition-all text-white placeholder:text-zinc-700 text-sm italic"
+              autoComplete="username"
+              className="w-full bg-black/40 border border-zinc-800 rounded-2xl px-6 py-4 outline-none focus:border-green-500/50 font-black transition-all text-white placeholder:text-zinc-800 text-sm italic"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
@@ -106,14 +121,15 @@ export default function AuthPage() {
               type={showPassword ? "text" : "password"}
               placeholder="SUA SENHA"
               required
-              className="w-full bg-black/40 border border-zinc-800 rounded-2xl px-6 py-4 outline-none focus:border-green-500/50 font-black transition-all text-white placeholder:text-zinc-700 text-sm italic pr-14"
+              autoComplete={isLogin ? "current-password" : "new-password"}
+              className="w-full bg-black/40 border border-zinc-800 rounded-2xl px-6 py-4 outline-none focus:border-green-500/50 font-black transition-all text-white placeholder:text-zinc-800 text-sm italic pr-14"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-5 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400 transition-colors"
+              className="absolute right-5 top-1/2 -translate-y-1/2 text-zinc-700 hover:text-zinc-400 transition-colors"
             >
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
@@ -125,7 +141,8 @@ export default function AuthPage() {
                 type={showPassword ? "text" : "password"}
                 placeholder="CONFIRME A SENHA"
                 required
-                className="w-full bg-black/40 border border-zinc-800 rounded-2xl px-6 py-4 outline-none focus:border-green-500/50 font-black transition-all text-white placeholder:text-zinc-700 text-sm italic pr-14"
+                autoComplete="new-password"
+                className="w-full bg-black/40 border border-zinc-800 rounded-2xl px-6 py-4 outline-none focus:border-green-500/50 font-black transition-all text-white placeholder:text-zinc-800 text-sm italic pr-14"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
@@ -150,13 +167,13 @@ export default function AuthPage() {
             setConfirmPassword("");
             setShowPassword(false);
           }}
-          className="w-full mt-8 text-zinc-600 text-[9px] font-black uppercase tracking-[0.2em] hover:text-green-500 transition-colors"
+          className="w-full mt-8 text-zinc-700 text-[9px] font-black uppercase tracking-[0.2em] hover:text-green-500 transition-colors"
         >
           {isLogin ? "Ainda não é um membro GG? Cadastre-se" : "Já possui registro? Autenticar"}
         </button>
       </div>
 
-      <p className="mt-8 text-[8px] font-black text-zinc-800 uppercase tracking-[0.5em]">Central de Comando // v1.0.3</p>
+      <p className="mt-8 text-[8px] font-black text-zinc-900 uppercase tracking-[0.5em]">Central de Comando // v1.0.3</p>
     </div>
   )
 }

@@ -1,11 +1,12 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
-import { Activity, LayoutGrid, ChevronLeft, ChevronRight, Save, User, Droplets, Plus, Moon, Trophy, Undo, MessageSquare, Notebook, Scale, Dumbbell, Ruler, ChevronUp } from "lucide-react"
+import { Activity, LayoutGrid, ChevronLeft, ChevronRight, Save, User, Droplets, Plus, Moon, Trophy, Undo, MessageSquare, Notebook, Scale, Dumbbell, Ruler, ChevronUp, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { storage } from "@/lib/storage"
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [plano, setPlano] = useState<any>(null)
   const [diaVisualizado, setDiaVisualizado] = useState(1)
   const [diaAtualDoSistema, setDiaAtualDoSistema] = useState(1)
@@ -30,13 +31,25 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const loadData = async () => {
-      setMounted(true)
-      const user = localStorage.getItem("user_gg")
-      if (user) {
-        const p = await storage.get(`plano_120_dias_${user}`)
-        if (p) setPlano(p)
+      if (typeof window === 'undefined') return
 
-        const savedUser = await storage.get(`perfil_${user}`)
+      const user = localStorage.getItem("user_gg")
+      if (!user) {
+        window.location.href = "/"
+        return
+      }
+
+      try {
+        // Busca Plano e Perfil do Storage (Híbrido Redis/Local)
+        const [p, savedUser, diaAt] = await Promise.all([
+          storage.get(`plano_120_dias_${user}`),
+          storage.get(`perfil_${user}`),
+          storage.get(`dia_atual_treino_${user}`)
+        ])
+
+        if (p) setPlano(p)
+        if (diaAt) setDiaAtualDoSistema(parseInt(diaAt))
+
         if (savedUser) {
           setUserData({
             username: user,
@@ -54,11 +67,11 @@ export default function DashboardPage() {
         } else {
           setUserData(prev => ({ ...prev, username: user }))
         }
-
-        const d = localStorage.getItem(`dia_atual_treino`)
-        if (d) setDiaAtualDoSistema(parseInt(d))
-      } else {
-        window.location.href = "/"
+      } catch (err) {
+        console.error("Erro ao carregar dados da Dashboard")
+      } finally {
+        setLoading(false)
+        setMounted(true)
       }
     }
     loadData()
@@ -69,14 +82,18 @@ export default function DashboardPage() {
       if (mounted && userData.username) {
         const u = userData.username
         const d = diaVisualizado
-        const agua = await storage.get(`agua_u${u}_d${d}`) || []
-        const sono = await storage.get(`sono_u${u}_d${d}`) || "0"
-        const humor = await storage.get(`humor_u${u}_d${d}`)
-        const relat = await storage.get(`relat_u${u}_d${d}`) || ""
+
+        // Busca dados específicos do dia
+        const [agua, sono, humor, relat] = await Promise.all([
+          storage.get(`agua_u${u}_d${d}`) || Promise.resolve([]),
+          storage.get(`sono_u${u}_d${d}`) || Promise.resolve("0"),
+          storage.get(`humor_u${u}_d${d}`),
+          storage.get(`relat_u${u}_d${d}`) || Promise.resolve("")
+        ])
 
         setDadosDoDia({
-          agua,
-          sonoHoras: parseInt(sono),
+          agua: Array.isArray(agua) ? agua : [],
+          sonoHoras: parseInt(sono) || 0,
           sonoQualidade: humor,
           relatorio: relat
         })
@@ -95,10 +112,10 @@ export default function DashboardPage() {
     const p = prompt("Novo Peso (kg):", userData.ultimoRegistro.weight.toString())
     if (p === null) return
 
-    const cintura = prompt("Nova Cintura (cm) - Deixe vazio para manter:", userData.ultimoRegistro.waist.toString())
-    const peito = prompt("Novo Peitoral (cm) - Deixe vazio para manter:", userData.ultimoRegistro.chest.toString())
-    const bracoE = prompt("Braço Esq (cm) - Deixe vazio para manter:", userData.ultimoRegistro.armL.toString())
-    const bracoD = prompt("Braço Dir (cm) - Deixe vazio para manter:", userData.ultimoRegistro.armR.toString())
+    const cintura = prompt("Nova Cintura (cm):", userData.ultimoRegistro.waist.toString())
+    const peito = prompt("Novo Peitoral (cm):", userData.ultimoRegistro.chest.toString())
+    const bracoE = prompt("Braço Esq (cm):", userData.ultimoRegistro.armL.toString())
+    const bracoD = prompt("Braço Dir (cm):", userData.ultimoRegistro.armR.toString())
 
     const novoRegistro = {
       data: new Date().toLocaleDateString(),
@@ -111,22 +128,12 @@ export default function DashboardPage() {
     }
 
     const novoHistorico = [...(userData.medidas || []), novoRegistro]
-
     const perfilCompleto = await storage.get(`perfil_${userData.username}`) || {}
-    const novoPerfil = {
-      ...perfilCompleto,
-      historico: novoHistorico,
-      ultimoRegistro: novoRegistro
-    }
+    const novoPerfil = { ...perfilCompleto, historico: novoHistorico, ultimoRegistro: novoRegistro }
 
-    setUserData(prev => ({
-      ...prev,
-      medidas: novoHistorico,
-      ultimoRegistro: novoRegistro
-    }))
-
+    setUserData(prev => ({ ...prev, medidas: novoHistorico, ultimoRegistro: novoRegistro }))
     await storage.save(`perfil_${userData.username}`, novoPerfil)
-    toast.success("Biometria atualizada!")
+    toast.success("Biometria sincronizada!")
   }
 
   const adjustRealizado = (modalidade: string, exIdx: number, step: number) => {
@@ -156,12 +163,12 @@ export default function DashboardPage() {
 
   const calculateDayScore = (diaIdx: number) => {
     if (!plano || !userData.username) return 0
-    const totalAgua = dadosDoDia.agua.reduce((acc, c) => acc + c.vol, 0)
+    const totalAgua = (dadosDoDia.agua || []).reduce((acc, c) => acc + (c.vol || 0), 0)
     let ptsEx = 0, totalEx = 0
     Object.keys(plano).forEach(mod => {
       if (plano[mod][diaIdx]) {
         plano[mod][diaIdx].exercicios.forEach((e: any) => {
-          totalEx++; if (e.concluido) ptsEx += Math.min(e.realizado / e.meta, 1)
+          totalEx++; if (e.concluido) ptsEx += Math.min((e.realizado || 0) / e.meta, 1)
         })
       }
     })
@@ -173,13 +180,19 @@ export default function DashboardPage() {
 
   const getHeatmapColor = (ex: any, diaIndex: number) => {
     const isSelected = diaIndex + 1 === diaVisualizado
-    const percent = (ex.realizado / ex.meta) * 100
-    if (!ex.concluido || ex.realizado === 0) return `bg-zinc-900/40 border-zinc-800 ${isSelected ? 'ring-1 ring-white/50 scale-105 z-20' : ''}`
+    const percent = (ex?.realizado / ex?.meta) * 100
+    if (!ex?.concluido || ex?.realizado === 0) return `bg-zinc-900/40 border-zinc-800 ${isSelected ? 'ring-1 ring-white/50 scale-105 z-20' : ''}`
     if (percent >= 100) return `bg-green-500 text-black border-transparent ${isSelected ? 'ring-2 ring-white scale-110 z-20' : ''}`
     return `bg-green-800/60 text-green-100 border-green-700/30 ${isSelected ? 'ring-1 ring-white/50 scale-105 z-20' : ''}`
   }
 
-  if (!mounted) return null
+  if (!mounted || loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="animate-spin text-green-500" size={32} />
+      </div>
+    )
+  }
 
   if (!plano) {
     return (
@@ -227,9 +240,9 @@ export default function DashboardPage() {
                         <p className="text-[9px] font-black text-green-500/80 italic">{ex.meta}{ex.unit}</p>
                       </div>
                       <div className="flex items-center bg-black/40 border border-zinc-800/50 rounded-xl p-1">
-                        <button onMouseDown={() => startHold(mod, i, -1)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 rounded-lg bg-zinc-800 font-bold text-xs">-</button>
+                        <button onTouchStart={() => startHold(mod, i, -1)} onTouchEnd={stopHold} onMouseDown={() => startHold(mod, i, -1)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 rounded-lg bg-zinc-800 font-bold text-xs">-</button>
                         <span className="w-12 text-center text-base font-black italic text-white">{ex.realizado || 0}</span>
-                        <button onMouseDown={() => startHold(mod, i, 1)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 rounded-lg bg-zinc-800 font-bold text-xs">+</button>
+                        <button onTouchStart={() => startHold(mod, i, 1)} onTouchEnd={stopHold} onMouseDown={() => startHold(mod, i, 1)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 rounded-lg bg-zinc-800 font-bold text-xs">+</button>
                       </div>
                     </div>
                   ))}

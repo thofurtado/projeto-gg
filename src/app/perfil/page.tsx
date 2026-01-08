@@ -1,12 +1,13 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
-import { Save, Dumbbell, Trophy, ArrowRight, Plus, Minus, Droplets, Ruler, Weight } from "lucide-react"
+import { Save, Dumbbell, Trophy, ArrowRight, Plus, Minus, Droplets, Ruler, Weight, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { storage } from "@/lib/storage"
 
 export default function ProfilePage() {
     const [mounted, setMounted] = useState(false)
     const [username, setUsername] = useState("")
+    const [loading, setLoading] = useState(true)
     const [formData, setFormData] = useState({
         weight: 80, height: 170, waist: 90, chest: 100, armL: 35, armR: 35, waterMeta: 3000
     })
@@ -15,12 +16,16 @@ export default function ProfilePage() {
 
     useEffect(() => {
         const initProfile = async () => {
-            setMounted(true)
+            if (typeof window === 'undefined') return
+
             const user = localStorage.getItem("user_gg")
-            if (!user) { 
-                window.location.href = "/" 
-            } else {
-                setUsername(user)
+            if (!user) {
+                window.location.href = "/"
+                return
+            }
+
+            setUsername(user)
+            try {
                 const saved = await storage.get(`perfil_${user}`)
                 if (saved) {
                     setFormData(saved.ultimoRegistro || saved)
@@ -28,6 +33,11 @@ export default function ProfilePage() {
                     const legacy = await storage.get(`bio_${user}`)
                     if (legacy) setFormData(legacy)
                 }
+            } catch (err) {
+                console.error("Erro ao carregar perfil")
+            } finally {
+                setLoading(false)
+                setMounted(true)
             }
         }
         initProfile()
@@ -52,7 +62,7 @@ export default function ProfilePage() {
         timerRef.current = setTimeout(run, key === 'weight' ? 250 : 400)
     }
 
-    const stopHold = () => { 
+    const stopHold = () => {
         if (timerRef.current) {
             clearTimeout(timerRef.current)
             timerRef.current = null
@@ -60,40 +70,51 @@ export default function ProfilePage() {
     }
 
     const handleSave = async () => {
+        setLoading(true)
         const timestamp = new Date().toISOString()
-        
-        const savedProfile = await storage.get(`perfil_${username}`)
-        let profileData = savedProfile ? savedProfile : {
-            username,
-            historico: [],
-            config: { waterMeta: formData.waterMeta }
-        }
 
-        const novoRegistro = { data: timestamp, ...formData }
-        profileData.ultimoRegistro = novoRegistro
-        profileData.historico.push(novoRegistro)
-        profileData.config.waterMeta = formData.waterMeta
-
-        await storage.save(`perfil_${username}`, profileData)
-        await storage.save(`bio_${username}`, formData)
-        
-        const localPlano = localStorage.getItem(`plano_120_dias_${username}`)
-        if (localPlano) {
-            try {
-                const planoObj = JSON.parse(localPlano)
-                await storage.save(`plano_120_dias_${username}`, planoObj)
-            } catch (e) {
-                console.error("Erro ao sincronizar plano local")
+        try {
+            const savedProfile = await storage.get(`perfil_${username}`)
+            let profileData = savedProfile ? savedProfile : {
+                username,
+                historico: [],
+                config: { waterMeta: formData.waterMeta }
             }
-        }
 
-        localStorage.setItem(`first_setup_${username}`, "done")
-        
-        toast.success("Dados salvos! Vamos configurar seu treino.")
-        window.location.href = "/config-treino"
+            const novoRegistro = { data: timestamp, ...formData }
+            profileData.ultimoRegistro = novoRegistro
+
+            if (!profileData.historico) profileData.historico = []
+            profileData.historico.push(novoRegistro)
+
+            if (!profileData.config) profileData.config = { waterMeta: 3000 }
+            profileData.config.waterMeta = formData.waterMeta
+
+            await storage.save(`perfil_${username}`, profileData)
+            await storage.save(`bio_${username}`, formData)
+            await storage.save(`first_setup_${username}`, "done")
+
+            const localPlano = await storage.get(`plano_120_dias_${username}`)
+            if (localPlano) {
+                await storage.save(`plano_120_dias_${username}`, localPlano)
+            }
+
+            toast.success("Dados salvos! Vamos configurar seu treino.")
+            window.location.href = "/config-treino"
+        } catch (err) {
+            toast.error("Erro ao salvar dados.")
+        } finally {
+            setLoading(false)
+        }
     }
 
-    if (!mounted) return null
+    if (!mounted || loading) {
+        return (
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <Loader2 className="text-green-500 animate-spin" size={32} />
+            </div>
+        )
+    }
 
     const Control = ({ field, step, label, unit, icon: Icon, isSmall = false }: any) => (
         <div className={`bg-zinc-900/50 border border-zinc-800 p-3 rounded-[2rem] flex flex-col items-center justify-center ${isSmall ? 'py-2' : 'py-4'}`}>
@@ -101,14 +122,14 @@ export default function ProfilePage() {
                 {Icon && <Icon size={10} />} {label}
             </span>
             <div className="flex items-center gap-4">
-                <button onMouseDown={() => startHold(field, -step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-red-500 transition-colors shrink-0">
+                <button onTouchStart={() => startHold(field, -step)} onTouchEnd={stopHold} onMouseDown={() => startHold(field, -step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-red-500 transition-colors shrink-0">
                     <Minus size={14} />
                 </button>
                 <div className="flex flex-col items-center min-w-[70px]">
                     <span className={`${isSmall ? 'text-xl' : 'text-3xl'} font-black italic text-white`}>{(formData as any)[field]}</span>
                     <span className="text-[8px] font-bold text-zinc-600 uppercase">{unit}</span>
                 </div>
-                <button onMouseDown={() => startHold(field, step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-green-500 transition-colors shrink-0">
+                <button onTouchStart={() => startHold(field, step)} onTouchEnd={stopHold} onMouseDown={() => startHold(field, step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full active:bg-green-500 transition-colors shrink-0">
                     <Plus size={14} />
                 </button>
             </div>
@@ -144,14 +165,14 @@ export default function ProfilePage() {
                                 <Droplets size={14} /> Meta de Hidratação
                             </span>
                             <div className="flex items-center justify-center gap-4">
-                                <button onMouseDown={() => startHold('waterMeta', -50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all shrink-0"><Minus size={20} /></button>
+                                <button onTouchStart={() => startHold('waterMeta', -50)} onTouchEnd={stopHold} onMouseDown={() => startHold('waterMeta', -50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all shrink-0"><Minus size={20} /></button>
                                 <div className="text-center w-[120px]">
                                     <span className="text-5xl font-black italic text-white leading-none inline-block">
                                         {formData.waterMeta.toString().padStart(4, '0')}
                                     </span>
                                     <p className="text-[9px] font-bold text-blue-500/50 uppercase mt-1">Mililitros / Dia</p>
                                 </div>
-                                <button onMouseDown={() => startHold('waterMeta', 50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all shrink-0"><Plus size={20} /></button>
+                                <button onTouchStart={() => startHold('waterMeta', 50)} onTouchEnd={stopHold} onMouseDown={() => startHold('waterMeta', 50)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-12 h-12 bg-zinc-900 rounded-2xl border border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-black transition-all shrink-0"><Plus size={20} /></button>
                             </div>
                         </div>
                     </div>
