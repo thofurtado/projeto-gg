@@ -28,12 +28,12 @@ export async function POST(req: Request) {
             await prisma.biometricLog.create({
                 data: {
                     userId: user.id,
-                    weight: weight ? parseFloat(weight) : null,
-                    height: height ? parseFloat(height) : null,
-                    waist: waist ? parseFloat(waist) : null,
-                    chest: chest ? parseFloat(chest) : null,
-                    bicepL: bicepL ? parseFloat(bicepL) : null,
-                    bicepR: bicepR ? parseFloat(bicepR) : null,
+                    weight: weight ? Number(weight) : 0,
+                    height: height ? Number(height) : 0,
+                    waist: waist ? Number(waist) : null,
+                    chest: chest ? Number(chest) : null,
+                    bicepL: bicepL ? Number(bicepL) : null,
+                    bicepR: bicepR ? Number(bicepR) : null,
                     date: new Date()
                 }
             })
