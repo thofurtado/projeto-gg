@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  username      String         @unique
+  name          String?
+  targetDays    Int            @default(5)
+  waterGoal     Int            @default(3000)
+  createdAt     DateTime       @default(now())
+  
+  // Relacionamentos
+  dailyLogs     DailyLog[]
+  biometricLogs BiometricLog[]
+  workoutLogs   WorkoutLog[]
+}
+
+model DailyLog {
+  id            String   @id @default(uuid())
+  date          DateTime
+  waterMl       Int      @default(0)
+  sleepHours    Float    @default(0)
+  ateFruits     Boolean  @default(false)
+  ateVeggies    Boolean  @default(false)
+  ateProtein    Boolean  @default(false)
+  calorieAbuse  Boolean  @default(false)
+  usedApp       Boolean  @default(true)
+  dayScore      Int      @default(0)
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+}
+
+model BiometricLog {
+  id        String   @id @default(uuid())
+  weight    Float    // Seu peso atual: 120.5
+  height    Float    // Sua altura: 183
+  waist     Float?   // Cintura: 120
+  chest     Float?   // Peitoral: 120
+  bicepL    Float?   // Bicep Esq: 36.5
+  bicepR    Float?   // Bicep Dir: 36.5
+  createdAt DateTime @default(now())
+  date      DateTime @default(now()) // Legacy field compat
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Added WorkoutLog back to fix relations referenced in API
+model WorkoutLog {
+  id          String   @id @default(uuid())
+  date        DateTime
+  modalidade  String
+  exercise    String
+  performed   Float
+  unit        String
+  comment     String?
+  pointsEarned Int     @default(0)
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+}
