@@ -84,9 +84,12 @@ export default function DashboardPage() {
     if (dadosDoDia.totalAgua >= 3000) pontuacao += 15;
 
     // 3. Sono (+15 ideal, -10 critico)
+    // 3. Sono (Regra Rigorosa: <5h (-15), 6h (+5), 7h (+9), 8h+ (+15))
     if (dadosDoDia.sonoHoras > 0) {
-      if (dadosDoDia.sonoHoras < 5) pontuacao -= 10;
-      else if (dadosDoDia.sonoHoras >= 5 && dadosDoDia.sonoHoras <= 8) pontuacao += 15;
+      if (dadosDoDia.sonoHoras < 5) pontuacao -= 15;
+      else if (dadosDoDia.sonoHoras < 7) pontuacao += 5;
+      else if (dadosDoDia.sonoHoras < 8) pontuacao += 9;
+      else pontuacao += 15; // Garante que 8 ou mais recebam 15 pontos
     }
 
     // 4. Nutrição (+5 cada)
@@ -312,77 +315,96 @@ export default function DashboardPage() {
 
       <main className="max-w-[600px] mx-auto pt-24 px-6 space-y-8">
 
-        {/* Date Selector */}
+        {/* Date Selector - Clean UI */}
         <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-[2.5rem] shadow-soft">
-          <div className="flex items-center justify-between mb-5 px-1">
+          <div className="flex items-center justify-between mb-5 px-3">
             <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none">Minha Jornada</h3>
             <span className="text-[10px] font-bold text-slate-900 dark:text-white uppercase leading-none italic">
               {diaVisualizado === diaAtualDoSistema ? 'Hoje' : `Dia ${diaVisualizado}`}
             </span>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar px-1">
+          <div className="flex justify-between items-center px-2">
             {[1, 2, 3, 4, 5, 6, 7].map((d) => (
               <button
                 key={d}
                 onClick={() => setDiaVisualizado(d)}
-                className={`flex-shrink-0 w-20 h-28 rounded-3xl flex flex-col items-center justify-center transition-all border-2 ${diaVisualizado === d
-                  ? 'bg-[#CCFF00] border-[#CCFF00] shadow-xl shadow-[#CCFF00]/20 scale-105 z-10'
-                  : 'bg-slate-50 dark:bg-[#1a1c21] border-slate-100 dark:border-white/5'
+                className={`relative w-10 h-10 rounded-full flex items-center justify-center transition-all ${diaVisualizado === d
+                  ? 'bg-[#CCFF00] text-black shadow-[0_0_15px_rgba(204,255,0,0.6)] scale-110'
+                  : 'bg-slate-100 dark:bg-white/10 text-slate-400 dark:text-zinc-500 hover:bg-slate-200 dark:hover:bg-white/20'
                   }`}
               >
-                <span className={`text-[10px] font-black uppercase mb-2 ${diaVisualizado === d ? 'text-black' : 'text-slate-400'}`}>Dia {d}</span>
-                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center mb-2 ${diaVisualizado === d ? 'bg-black/10' : 'bg-slate-100 dark:bg-black/20'}`}>
-                  {diaVisualizado === d ? <div className="w-2 h-2 rounded-full bg-black/50 dark:bg-white/50 animate-pulse" /> : null}
-                </div>
+                {/* Status Dot if completed (mock logic) */}
+                {d < diaAtualDoSistema && (
+                  <div className="absolute -top-1 -right-1 bg-[#CCFF00] rounded-full p-0.5 border-2 border-white dark:border-black">
+                    <Check size={8} className="text-black" strokeWidth={4} />
+                  </div>
+                )}
+                <span className="text-[10px] font-black">{d}</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Água */}
-        <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-8 rounded-[2.5rem] shadow-soft">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none">Hidratação</h3>
-            <button onClick={clearAgua} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Undo size={18} /></button>
-          </div>
-          <div className="flex gap-10 items-center">
-            <div className="relative w-14 h-52 bg-slate-100 dark:bg-black/20 rounded-full overflow-hidden border-4 border-white dark:border-white/5 shadow-inner">
-              <div
-                className="absolute bottom-0 left-0 right-0 bg-blue-500 transition-all duration-1000 shadow-[0_0_20px_rgba(59,130,246,0.5)]"
-                style={{ height: `${Math.min((dadosDoDia.totalAgua / 3000) * 100, 100)}%` }}
-              />
-            </div>
-            <div className="flex-1 space-y-6">
+        {/* Água - Compact Card */}
+        <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-6 rounded-[2.5rem] shadow-soft relative overflow-hidden group">
+          {/* Background Wave Animation */}
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-blue-500/10 dark:bg-blue-500/20 transition-all duration-1000 z-0 pointer-events-none"
+            style={{ height: `${Math.min((dadosDoDia.totalAgua / 3000) * 100, 100)}%` }}
+          />
+
+          <div className="relative z-10 flex flex-col gap-6">
+            <div className="flex items-center justify-between">
               <div className="flex flex-col">
-                <span className="text-6xl font-black italic text-slate-900 dark:text-white leading-none tabular-nums">{dadosDoDia.totalAgua}</span>
-                <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest mt-2">ml de 3000ml</span>
+                <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1">Hidratação</h3>
+                <span className="text-4xl font-black italic text-slate-900 dark:text-white leading-none tabular-nums">
+                  {dadosDoDia.totalAgua}<span className="text-sm text-slate-400 ml-1">ml</span>
+                </span>
               </div>
-              <div className="flex gap-4">
-                <button onClick={() => updateAgua(250)} className="flex-1 py-6 bg-slate-100 dark:bg-white/5 hover:bg-[#CCFF00] hover:text-black rounded-3xl font-black text-[10px] uppercase transition-all shadow-sm">Copo (250ml)</button>
-                <button onClick={() => updateAgua(1000)} className="flex-1 py-6 bg-[#CCFF00] text-black rounded-3xl font-black text-[10px] uppercase shadow-lg shadow-[#CCFF00]/10 active:scale-95 transition-all">Garrafa (1L)</button>
-              </div>
+              <button onClick={clearAgua} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Undo size={16} /></button>
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => updateAgua(250)} className="flex-1 py-4 bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:bg-[#CCFF00] hover:text-black hover:border-[#CCFF00] rounded-2xl font-black text-[9px] uppercase transition-all">250ml</button>
+              <button onClick={() => updateAgua(500)} className="flex-1 py-4 bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:bg-[#CCFF00] hover:text-black hover:border-[#CCFF00] rounded-2xl font-black text-[9px] uppercase transition-all">500ml</button>
+              <button onClick={() => updateAgua(1000)} className="flex-1 py-4 bg-[#CCFF00] text-black rounded-2xl font-black text-[9px] uppercase shadow-lg shadow-[#CCFF00]/10 active:scale-95 transition-all">1L</button>
             </div>
           </div>
         </div>
 
         {/* Sono e Nutrição */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-8 rounded-[2.5rem] shadow-soft">
-            <div className="flex items-center justify-between mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Sono Scorecard */}
+          <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-6 rounded-[2.5rem] shadow-soft flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-4">
               <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Sono (Horas)</h3>
-              <span className="text-2xl font-black italic text-slate-900 dark:text-white">{dadosDoDia.sonoHoras.toFixed(1)}h</span>
+              <span className={`text-2xl font-black italic ${dadosDoDia.sonoHoras < 5 ? 'text-red-500' : dadosDoDia.sonoHoras >= 8 ? 'text-[#CCFF00]' : 'text-slate-900 dark:text-white'}`}>
+                {dadosDoDia.sonoHoras.toFixed(1)}h
+              </span>
             </div>
+
             <input
               type="range" min="0" max="12" step="0.5"
               value={dadosDoDia.sonoHoras}
               onChange={(e) => syncWithServer({ sonoHoras: parseFloat(e.target.value) })}
-              className="w-full h-4 bg-slate-100 dark:bg-black/20 rounded-full appearance-none accent-[#CCFF00] mb-6"
+              className="w-full h-3 bg-slate-100 dark:bg-black/20 rounded-full appearance-none accent-black dark:accent-white mb-4"
             />
+
+            <div className="flex items-center justify-between px-2 py-2 bg-slate-50 dark:bg-black/20 rounded-xl">
+              <span className="text-[9px] font-bold uppercase text-slate-400">Status</span>
+              <span className="text-[10px] font-black uppercase">
+                {dadosDoDia.sonoHoras < 5 ? <span className="text-red-500">Insuficiente (-15)</span> :
+                  dadosDoDia.sonoHoras < 7 ? <span className="text-yellow-500">Regular (+5)</span> :
+                    dadosDoDia.sonoHoras < 8 ? <span className="text-blue-500">Bom (+9)</span> :
+                      <span className="text-[#CCFF00] dark:text-[#CCFF00]">Excelente (+15)</span>}
+              </span>
+            </div>
           </div>
 
-          <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-8 rounded-[2.5rem] shadow-soft">
-            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-8">Nutrição Limpa</h3>
-            <div className="flex gap-4 justify-between">
+          {/* Nutrição Limpa */}
+          <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-6 rounded-[2.5rem] shadow-soft">
+            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-6">Nutrição Limpa</h3>
+            <div className="flex gap-3 justify-between">
               {[
                 { field: 'ateFrutas', emoji: '🍎' },
                 { field: 'ateLegumes', emoji: '🥦' },
@@ -391,7 +413,9 @@ export default function DashboardPage() {
                 <button
                   key={item.field}
                   onClick={() => syncWithServer({ [item.field]: !((dadosDoDia as any)[item.field]) })}
-                  className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl border transition-all ${(dadosDoDia as any)[item.field] ? 'bg-[#CCFF00]/10 border-[#CCFF00] shadow-sm scale-110' : 'bg-slate-50 border-slate-100 opacity-40'
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl border transition-all ${(dadosDoDia as any)[item.field]
+                    ? 'bg-[#CCFF00] border-[#CCFF00] text-black shadow-md scale-105'
+                    : 'bg-slate-50 dark:bg-white/5 border-slate-100 dark:border-white/5 opacity-50 grayscale'
                     }`}
                 >
                   {item.emoji}
@@ -400,10 +424,12 @@ export default function DashboardPage() {
             </div>
             <button
               onClick={() => syncWithServer({ exagereiHoje: !dadosDoDia.exagereiHoje })}
-              className={`w-full mt-6 py-4 rounded-2xl border transition-all flex items-center justify-center gap-2 font-black text-[9px] uppercase ${dadosDoDia.exagereiHoje ? 'bg-red-50 border-red-200 text-red-500' : 'bg-slate-50 border-slate-100 text-slate-400'
+              className={`w-full mt-5 py-3 rounded-2xl border transition-all flex items-center justify-center gap-2 font-black text-[9px] uppercase ${dadosDoDia.exagereiHoje
+                  ? 'bg-red-500 text-white border-red-500 shadow-md shadow-red-500/20'
+                  : 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-500/30'
                 }`}
             >
-              <Pizza size={14} /> {dadosDoDia.exagereiHoje ? 'Exagerei (-20 pts)' : 'Fui honesto!'}
+              {dadosDoDia.exagereiHoje ? 'Furei a Dieta (-20 pts)' : 'Dieta Seguida (100%)'}
             </button>
           </div>
         </div>

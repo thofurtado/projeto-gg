@@ -1,13 +1,15 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
-import { Save, Dumbbell, Trophy, ArrowRight, Plus, Minus, Droplets, Ruler, Weight, Loader2, Home, Activity, User, History } from "lucide-react"
+import { Save, Dumbbell, Trophy, ArrowRight, Plus, Minus, Droplets, Ruler, Weight, Loader2, Home, Activity, User, History, Sun, Moon } from "lucide-react"
 import { toast } from "sonner"
 import { storage } from "@/lib/storage"
+import { useTheme } from "@/components/theme-provider"
 
 export default function ProfilePage() {
     const [mounted, setMounted] = useState(false)
     const [username, setUsername] = useState("")
     const [loading, setLoading] = useState(true)
+    const { theme, toggleTheme } = useTheme()
 
     const [formData, setFormData] = useState({
         weight: 80.0,
@@ -226,7 +228,15 @@ export default function ProfilePage() {
                         <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-500 uppercase mt-1 tracking-widest italic">{username}</span>
                     </div>
                 </div>
-                <button onClick={handleSave} className="p-3 bg-[#CCFF00] text-black rounded-2xl hover:scale-105 active:scale-90 transition-all shadow-md shadow-[#CCFF00]/10"><Save size={20} /></button>
+                <div className="flex items-center gap-3">
+                    <button onClick={toggleTheme} className="p-3 bg-slate-100 dark:bg-zinc-900 text-slate-500 dark:text-zinc-400 rounded-xl transition-all border border-slate-200 dark:border-zinc-800 hover:text-[#CCFF00]">
+                        {theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
+                    </button>
+                    <button onClick={handleSave} className="p-3 bg-[#CCFF00] text-black rounded-xl hover:scale-105 active:scale-90 transition-all shadow-md shadow-[#CCFF00]/10 flex items-center gap-2">
+                        <Save size={18} />
+                        <span className="text-[10px] font-black uppercase hidden sm:inline">Salvar</span>
+                    </button>
+                </div>
             </header>
 
             <main className="max-w-[600px] mx-auto p-6 lg:p-10 pb-32">

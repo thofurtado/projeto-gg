@@ -87,8 +87,10 @@ export async function POST(req: Request) {
         if (waterVal >= (user.waterGoal || 3000)) scoringPoints += 15
 
         if (sleepVal > 0) {
-            if (sleepVal < 5) scoringPoints -= 10
-            else if (sleepVal >= 5 && sleepVal <= 8) scoringPoints += 15
+            if (sleepVal < 5) scoringPoints -= 15
+            else if (sleepVal < 7) scoringPoints += 5
+            else if (sleepVal < 8) scoringPoints += 9
+            else scoringPoints += 15 // Covers 8 and above correctly
         }
 
         if (metrics?.ateFruits) scoringPoints += 5
