@@ -142,6 +142,13 @@ export default function ProfilePage() {
 
             toast.success("Evolução registrada com sucesso!")
 
+            // Se for o primeiro registro (histórico vazio), libera o Dashboard
+            if (history.length === 0) {
+                setTimeout(() => {
+                    window.location.href = "/dashboard"
+                }, 1000)
+            }
+
         } catch (err: any) {
             console.error("Erro handleSave:", err)
             toast.error(`Falha: ${err.message}`)

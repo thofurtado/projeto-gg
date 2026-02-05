@@ -36,42 +36,40 @@ export async function POST(req: Request) {
         let pointsFromTraining = 0
 
         if (sessionActivity) {
-            // A. Definir o intervalo da semana (Domingo a Sábado) em UTC
+            // A. Semana de Segunda a Domingo (Padrão BR/ISO-like para fins de treino)
             const weekStart = new Date(logDateObj)
-            const dayOfWeek = weekStart.getUTCDay() // 0 (Domingo) a 6 (Sábado)
-            weekStart.setUTCDate(weekStart.getUTCDate() - dayOfWeek)
+            const dow = weekStart.getUTCDay() // 0=Dom, 1=Seg...
+            // Se Domingo(0) -> volta 6 dias. Se Seg(1) -> volta 0.
+            const sub = dow === 0 ? 6 : dow - 1
+
+            weekStart.setUTCDate(weekStart.getUTCDate() - sub)
             weekStart.setUTCHours(0, 0, 0, 0)
 
             const weekEnd = new Date(weekStart)
-            weekEnd.setUTCDate(weekEnd.getUTCDate() + 7) // Próximo Domingo (exclusive)
+            weekEnd.setUTCDate(weekEnd.getUTCDate() + 7)
 
-            // B. Buscar TODOS os logs da semana (SEM apagar nada antes)
+            // B. Buscar histórico REAL da semana no banco
             const weekLogs = await prisma.workoutLog.findMany({
                 where: {
                     userId: user.id,
-                    date: {
-                        gte: weekStart,
-                        lt: weekEnd
-                    }
+                    date: { gte: weekStart, lt: weekEnd }
                 },
                 select: { date: true }
             })
 
-            // C. Contar dias ÚNICOS na semana
-            // Transformamos em string YYYY-MM-DD para evitar duplicidade de horas
-            const uniqueDaysSet = new Set(weekLogs.map(log => log.date.toISOString().split('T')[0]))
+            // C. Cálculo de Frequência (Algoritmo de Contagem Pura)
+            const uniqueDates = new Set(weekLogs.map(l => l.date.toISOString().split('T')[0]))
+            const todayStr = logDateObj.toISOString().split('T')[0]
 
-            // TRUQUE DO MESTRE: Adicionamos o dia de HOJE na lista na memória.
-            // Isso garante que, mesmo que o banco esteja vazio hoje (ou vamos sobrescrever),
-            // a contagem de hoje será considerada.
-            uniqueDaysSet.add(logDateObj.toISOString().split('T')[0])
+            // "Se o dia de hoje JÁ estiver na lista uniqueDays, a contagem é diasTreinados."
+            // "Se o dia de hoje NÃO estiver na lista, a contagem será diasTreinados + 1."
+            let weeklyCount = uniqueDates.size
+            if (!uniqueDates.has(todayStr)) {
+                weeklyCount += 1
+            }
 
-            const weeklyCount = uniqueDaysSet.size
-
-            // D. Calcular Pontos
-            // Se weeklyCount é 1 (só hoje), pegamos index 0. 
-            // Se weeklyCount é 4 (3 anteriores + hoje), pegamos index 3.
-            // Limitamos ao tamanho do array para não quebrar.
+            // D. Index baseado na contagem
+            // 1º treino = index 0. 4º treino = index 3.
             const index = Math.max(0, Math.min(weeklyCount - 1, TRAINING_GAINS.length - 1))
             pointsFromTraining = TRAINING_GAINS[index]
 
@@ -118,23 +116,28 @@ export async function POST(req: Request) {
         let scoringPoints = 0
         const waterVal = metrics?.waterMl || 0
         const sleepVal = metrics?.sleepHours || 0
+        const targetWater = user.waterGoal || 3000
 
         // Regra Água
-        if (waterVal >= (user.waterGoal || 3000)) scoringPoints += 15
+        if (waterVal >= targetWater) scoringPoints += 4
+        else if (waterVal >= (targetWater / 2)) scoringPoints += 1.5
+        else scoringPoints -= 1
 
         // Regra Sono
         if (sleepVal > 0) {
-            if (sleepVal < 5) scoringPoints -= 15
-            else if (sleepVal < 7) scoringPoints += 5
-            else if (sleepVal < 8) scoringPoints += 9 // 7h a 7h59 = 17 pontos totais (exemplo original dizia 17, aqui soma +9 ao base? Ajuste conforme sua regra exata de sono)
-            else scoringPoints += 15 // 8h+ = 20 pontos totais (se considerar base)
+            if (sleepVal < 5) scoringPoints -= 4
+            else if (sleepVal < 7) scoringPoints += 3
+            else if (sleepVal < 8) scoringPoints += 5
+            else scoringPoints += 8
         }
 
         // Regra Alimentação
-        if (metrics?.ateFruits) scoringPoints += 5
-        if (metrics?.ateVeggies) scoringPoints += 5
-        if (metrics?.ateProtein) scoringPoints += 5
-        if (metrics?.calorieAbuse) scoringPoints -= 10
+        if (metrics?.ateFruits) scoringPoints += 2
+        if (metrics?.ateVeggies) scoringPoints += 2
+        if (metrics?.ateProtein) scoringPoints += 2
+
+        // Penalidade Dieta
+        if (metrics?.calorieAbuse) scoringPoints -= 5
 
         const totalDayScore = pointsFromTraining + scoringPoints
 

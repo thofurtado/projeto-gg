@@ -80,7 +80,7 @@ export default function AuthPage() {
 
         localStorage.setItem("user_gg", lowerUser)
         toast.success("Perfil forjado com sucesso!")
-        window.location.href = "/dashboard"
+        window.location.href = "/perfil"
       }
     } catch (err) {
       console.error(err)

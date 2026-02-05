@@ -3,11 +3,12 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import {
   Activity, Home, User, Droplets, Moon, Trophy,
   Undo, Dumbbell, Loader2, Pizza, CheckCircle2, Sun, Check,
-  MessageSquare, Footprints, Bike, Waves, Wind, Plus, Edit3, Swords, AlertTriangle, Trash2, LogOut
+  MessageSquare, Footprints, Bike, Waves, Wind, Plus, Edit3, Swords, AlertTriangle, Trash2, LogOut, Users, History as HistoryIcon
 } from "lucide-react"
 import { toast } from "sonner"
-import { storage } from "@/lib/storage"
+// import { storage } from "@/lib/storage" // Se não estiver usando, pode remover
 import confetti from 'canvas-confetti'
+import { useTheme } from "@/components/theme-provider"
 
 // Default empty state to prevent data leaks between dates
 const DEFAULT_DAY_DATA = {
@@ -30,19 +31,34 @@ const DEFAULT_SESSION = {
   id: ""
 };
 
-import { useTheme } from "@/components/theme-provider"
-
 export default function DashboardPage() {
+  // Estados de controle
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
-  const { theme, toggleTheme } = useTheme() // Integração com ThemeContext
-  const [diaVisualizado, setDiaVisualizado] = useState(1)
-  const [diaAtualDoSistema, setDiaAtualDoSistema] = useState(1)
+  const [verifyingSession, setVerifyingSession] = useState(true)
 
+  // Estados principais
   const [userData, setUserData] = useState({
     username: "",
     config: { metaAgua: 3000 },
   })
+
+  // Theme
+  const { theme, toggleTheme } = useTheme()
+
+  // Helper para dia da semana (1=Seg, 7=Dom)
+  const getWeekDayIndex = () => {
+    const d = new Date().getDay();
+    // No JS, 0 é Domingo. Queremos que 0 vire 7 (para ser o último da semana visual BR)
+    // Se quiser manter coerência com o Backend: 0=Dom.
+    // Mas para visualização "Segunda a Domingo":
+    return d === 0 ? 7 : d;
+  };
+
+  const [diaVisualizado, setDiaVisualizado] = useState(getWeekDayIndex())
+  const [diaAtualDoSistema, setDiaAtualDoSistema] = useState(getWeekDayIndex())
+
+
 
   // States
   const [dadosDoDia, setDadosDoDia] = useState(DEFAULT_DAY_DATA)
@@ -74,119 +90,166 @@ export default function DashboardPage() {
     }
   }, [])
 
-  // Real-time Score Calculation (Client-side immediate feedback)
+  // --- CORREÇÃO AQUI: LÓGICA DE PLACAR VISUAL IGUAL AO BACKEND ---
   const calcularPlacarEmTempoReal = useCallback(() => {
     let pontuacao = 0;
+    const metaAgua = userData.config.metaAgua || 3000;
 
-    // 1. Pontos de Treino (Baseado no salvo/retornado do banco)
+    // 1. Pontos de Treino
     pontuacao += sessionActivity.points;
 
-    // 2. Água (+15 se bater 3000)
-    if (dadosDoDia.totalAgua >= 3000) pontuacao += 15;
+    // 2. Água (4pts Meta Cheia | 1.5pts Meia Meta | -1pt Abaixo)
+    if (dadosDoDia.totalAgua >= metaAgua) pontuacao += 4;
+    else if (dadosDoDia.totalAgua >= (metaAgua / 2)) pontuacao += 1.5;
+    else pontuacao -= 1; // Igual ao backend route.ts que você mandou
 
-    // 3. Sono (+15 ideal, -10 critico)
-    // 3. Sono (Regra Rigorosa: <5h (-15), 6h (+5), 7h (+9), 8h+ (+15))
+    // 3. Sono (<5h: -4 | 5h-7h: +3 | 7h-8h: +5 | 8h+: +8)
     if (dadosDoDia.sonoHoras > 0) {
-      if (dadosDoDia.sonoHoras < 5) pontuacao -= 15;
-      else if (dadosDoDia.sonoHoras < 7) pontuacao += 5;
-      else if (dadosDoDia.sonoHoras < 8) pontuacao += 9;
-      else pontuacao += 15; // Garante que 8 ou mais recebam 15 pontos
+      if (dadosDoDia.sonoHoras < 5) pontuacao -= 4;
+      else if (dadosDoDia.sonoHoras < 7) pontuacao += 3;
+      else if (dadosDoDia.sonoHoras < 8) pontuacao += 5;
+      else pontuacao += 8;
     }
 
-    // 4. Nutrição (+5 cada)
-    if (dadosDoDia.ateFrutas) pontuacao += 5;
-    if (dadosDoDia.ateLegumes) pontuacao += 5;
-    if (dadosDoDia.ateProteina) pontuacao += 5;
+    // 4. Nutrição (+2 cada)
+    if (dadosDoDia.ateFrutas) pontuacao += 2;
+    if (dadosDoDia.ateLegumes) pontuacao += 2;
+    if (dadosDoDia.ateProteina) pontuacao += 2;
 
-    // 5. Penalidade (-10)
-    if (dadosDoDia.exagereiHoje) pontuacao -= 10;
+    // 5. Penalidade (-5)
+    if (dadosDoDia.exagereiHoje) pontuacao -= 5;
 
-    return Math.max(0, pontuacao); // Nunca negativo visualmente
-  }, [dadosDoDia, sessionActivity.points]);
+    // Permite negativo visualmente se necessário, ou trava em 0.
+    // O backend permite negativo? Se sim, remova o Math.max.
+    // Vou manter Math.max(0) para ficar bonito na UI.
+    return Math.max(0, pontuacao);
+  }, [dadosDoDia, sessionActivity.points, userData.config.metaAgua]);
 
   // Init
   useEffect(() => {
     const initApp = async () => {
-      if (typeof window === 'undefined') return
+      // 1. Verifica LocalStorage
+      const storedUser = localStorage.getItem("user_gg")
 
-      const user = localStorage.getItem("user_gg")
-      if (!user) {
+      if (!storedUser) {
         window.location.href = "/"
         return
       }
 
-      const diaAt = await storage.get(`dia_atual_treino_${user}`)
-      const currentDay = diaAt ? parseInt(diaAt) : 1
-      setDiaAtualDoSistema(currentDay)
-      setDiaVisualizado(currentDay)
-      setUserData(prev => ({ ...prev, username: user }))
+      try {
+        // 2. Verifica no Backend se o usuário ainda existe (POST)
+        const res = await fetch('/api/user/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: storedUser })
+        })
 
-      setMounted(true)
-      setLoading(false)
+        if (!res.ok) {
+          throw new Error("Usuário inválido ou deletado")
+        }
+
+        const data = await res.json()
+
+        if (!data.valid) {
+          throw new Error("Usuário não encontrado")
+        }
+
+        // 3. Sucesso: Configura estados
+        const currentDay = getWeekDayIndex()
+        setDiaAtualDoSistema(currentDay)
+        setDiaVisualizado(currentDay)
+        setUserData(prev => ({ ...prev, username: storedUser }))
+
+        setMounted(true)
+        setVerifyingSession(false)
+        setLoading(false)
+
+      } catch (error) {
+        // 4. Falha de Segurança: Limpa tudo e manda pro login
+        console.error("Sessão inválida:", error)
+        localStorage.removeItem("user_gg")
+        window.location.href = "/"
+      }
     }
+
     initApp()
   }, [])
 
-  // Data Persistence & Reset Logic
+  // Data Fetching Logic (Triggered by username set)
   useEffect(() => {
-    if (!mounted || !userData.username) return
-
-    // 1. Reset State IMMEDIATELY to prevent leaks
-    setDadosDoDia(DEFAULT_DAY_DATA)
-    setSessionActivity(DEFAULT_SESSION)
+    if (!userData.username) return
 
     const fetchDayData = async () => {
+      setLoading(true)
       const u = userData.username
-      const targetDate = new Date()
-      targetDate.setHours(0, 0, 0, 0)
-      targetDate.setDate(targetDate.getDate() + (diaVisualizado - diaAtualDoSistema))
 
       try {
-        const res = await fetch(`/api/daily-log?username=${u}&date=${targetDate.toISOString()}`)
+        const res = await fetch(`/api/daily-log?username=${u}`) // Pega log de hoje
         if (res.ok) {
           const data = await res.json()
 
-          // 2. Update with fetched data ONLY
-          if (data.dailyLog) {
+          if (data && data.todayLog) {
             setDadosDoDia({
-              agua: [{ id: 0, vol: data.dailyLog.waterMl || 0 }],
-              totalAgua: data.dailyLog.waterMl || 0,
-              sonoHoras: data.dailyLog.sleepHours || 0,
-              ateFrutas: data.dailyLog.ateFruits || false,
-              ateLegumes: data.dailyLog.ateVeggies || false,
-              ateProteina: data.dailyLog.ateProtein || false,
-              exagereiHoje: data.dailyLog.calorieAbuse || false,
-              dayScore: data.dailyLog.dayScore || 0
+              agua: [],
+              totalAgua: data.todayLog.waterMl || 0,
+              sonoHoras: data.todayLog.sleepHours || 0,
+              ateFrutas: data.todayLog.ateFruits || false,
+              ateLegumes: data.todayLog.ateVeggies || false,
+              ateProteina: data.todayLog.ateProtein || false,
+              exagereiHoje: data.todayLog.calorieAbuse || false,
+              dayScore: data.todayLog.dayScore || 0
             })
-          }
 
-          if (data.workoutLogs) {
-            const session = data.workoutLogs.find((w: any) => w.exercise === 'SESSÃO_DIÁRIA');
-            if (session) {
-              const isCustom = !['Musculação', 'Caminhada', 'Ciclismo', 'Natação', 'Lutas'].includes(session.modalidade);
+            // Sessão
+            if (data.todayLog.workoutLogs && data.todayLog.workoutLogs.length > 0) {
+              const lastWorkout = data.todayLog.workoutLogs[0]
               setSessionActivity({
-                type: isCustom ? "Outro" : session.modalidade,
-                customType: isCustom ? session.modalidade : "",
-                comment: session.comment || "",
-                points: session.pointsEarned || 0,
+                type: lastWorkout.modalidade,
+                customType: lastWorkout.modalidade === 'Outro' ? lastWorkout.exercise : '',
+                comment: lastWorkout.comment || '',
+                points: lastWorkout.pointsEarned,
                 saved: true,
-                id: session.id
-              });
+                id: lastWorkout.id
+              })
+            } else {
+              setSessionActivity(DEFAULT_SESSION)
             }
+          } else {
+            setDadosDoDia(DEFAULT_DAY_DATA)
+            setSessionActivity(DEFAULT_SESSION)
           }
         }
       } catch (err) {
         toast.error("Erro ao carregar dados")
+      } finally {
+        setLoading(false)
       }
     }
-    fetchDayData()
-  }, [diaVisualizado, mounted, userData.username, diaAtualDoSistema])
+
+    if (!verifyingSession) {
+      fetchDayData()
+    }
+  }, [userData.username, verifyingSession])
+
+
+  // Prevenir renderização antes da montagem
+  if (!mounted) return null
+
+  // Tela de Loading de Sessão
+  if (verifyingSession) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-black flex flex-col items-center justify-center p-4">
+        <Loader2 className="w-10 h-10 text-[#CCFF00] animate-spin mb-4" />
+        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Verificando Credenciais...</p>
+      </div>
+    )
+  }
 
   // Sync / Upsert Function
   const syncWithServer = async (updatedFields: any) => {
     const targetDate = new Date();
     targetDate.setHours(0, 0, 0, 0)
-    targetDate.setDate(targetDate.getDate() + (diaVisualizado - diaAtualDoSistema));
+    // targetDate.setDate(targetDate.getDate() + (diaVisualizado - diaAtualDoSistema)); // Se diaVisualizado for sempre hoje, isso é 0.
 
     const currentData = { ...dadosDoDia, ...updatedFields };
     // Optimistic Update
@@ -216,7 +279,6 @@ export default function DashboardPage() {
   }
 
   const updateAgua = (vol: number) => {
-    // Logic to add water
     const newTotal = dadosDoDia.totalAgua + vol;
     const newHistory = [...dadosDoDia.agua, { id: Date.now(), vol }];
     syncWithServer({ agua: newHistory, totalAgua: newTotal });
@@ -229,7 +291,6 @@ export default function DashboardPage() {
   const saveActivity = async () => {
     const targetDate = new Date();
     targetDate.setHours(0, 0, 0, 0)
-    targetDate.setDate(targetDate.getDate() + (diaVisualizado - diaAtualDoSistema));
 
     const finalType = sessionActivity.type === "Outro" ? sessionActivity.customType : sessionActivity.type;
 
@@ -254,7 +315,7 @@ export default function DashboardPage() {
 
       if (res.ok) {
         const result = await res.json();
-        const workoutId = result.workoutId || ""; // Ensure API returns this
+        const workoutId = result.workoutId || "";
         setSessionActivity(prev => ({ ...prev, saved: true, points: result.trainingPoints, id: workoutId }));
 
         // Update local day score with server result just to be sure
@@ -300,8 +361,6 @@ export default function DashboardPage() {
     }
   }
 
-
-
   if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] dark:bg-black flex items-center justify-center">
@@ -316,7 +375,7 @@ export default function DashboardPage() {
     { name: "Ciclismo", icon: <Bike size={20} /> },
     { name: "Natação", icon: <Waves size={20} /> },
     { name: "Lutas", icon: <Swords size={20} /> },
-    { name: "Outro", icon: <Plus size={20} /> } // Custom Activity Button
+    { name: "Outro", icon: <Plus size={20} /> }
   ];
 
   return (
@@ -355,9 +414,9 @@ export default function DashboardPage() {
         <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-[2.5rem] shadow-soft">
           <div className="flex items-center justify-between mb-5 px-3">
             <div className="flex flex-col w-full mr-4">
-              <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none mb-2">Dia {diaVisualizado} <span className="text-slate-300 dark:text-white/20">/ 120</span></h3>
+              <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none mb-2">Dia {diaVisualizado} <span className="text-slate-300 dark:text-white/20">/ 7</span></h3>
               <div className="w-full bg-slate-100 dark:bg-white/5 h-1.5 rounded-full overflow-hidden">
-                <div className="h-full bg-[#CCFF00]" style={{ width: `${(diaVisualizado / 120) * 100}%` }} />
+                <div className="h-full bg-[#CCFF00]" style={{ width: `${(diaVisualizado / 7) * 100}%` }} />
               </div>
             </div>
             <span className="text-[9px] font-black text-slate-300 dark:text-white/30 uppercase leading-none italic whitespace-nowrap">
@@ -365,30 +424,32 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="flex justify-between items-center px-2">
-            {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-              <button
-                key={d}
-                onClick={() => setDiaVisualizado(d)}
-                className={`relative w-10 h-10 rounded-full flex items-center justify-center transition-all ${diaVisualizado === d
-                  ? 'bg-[#CCFF00] text-black shadow-[0_0_15px_rgba(204,255,0,0.6)] scale-110'
-                  : 'bg-slate-100 dark:bg-white/10 text-slate-400 dark:text-zinc-500 hover:bg-slate-200 dark:hover:bg-white/20'
-                  }`}
-              >
-                {/* Status Dot if completed (mock logic) */}
-                {d < diaAtualDoSistema && (
-                  <div className="absolute -top-1 -right-1 bg-[#CCFF00] rounded-full p-0.5 border-2 border-white dark:border-black">
-                    <Check size={8} className="text-black" strokeWidth={4} />
-                  </div>
-                )}
-                <span className="text-[10px] font-black">{d}</span>
-              </button>
-            ))}
+            {[1, 2, 3, 4, 5, 6, 7].map((d) => {
+              const isToday = d === diaAtualDoSistema;
+              return (
+                <button
+                  key={d}
+                  onClick={() => { }} // Bloqueado
+                  disabled={true}
+                  className={`relative w-10 h-10 rounded-full flex items-center justify-center transition-all ${diaVisualizado === d
+                    ? 'bg-[#CCFF00] text-black shadow-[0_0_15px_rgba(204,255,0,0.6)] scale-110'
+                    : 'bg-slate-100 dark:bg-white/10 text-slate-400 dark:text-zinc-500'
+                    } ${!isToday ? 'opacity-30 cursor-not-allowed grayscale' : ''}`}
+                >
+                  {d < diaAtualDoSistema && (
+                    <div className="absolute -top-1 -right-1 bg-slate-400 rounded-full p-0.5 border-2 border-white dark:border-black opacity-50">
+                      <Check size={8} className="text-white" strokeWidth={4} />
+                    </div>
+                  )}
+                  <span className="text-[10px] font-black">{d}</span>
+                </button>
+              )
+            })}
           </div>
         </div>
 
         {/* Água - Compact Card */}
-        <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-6 rounded-[2.5rem] shadow-soft relative overflow-hidden group">
-          {/* Background Wave Animation */}
+        <div className={`bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-6 rounded-[2.5rem] shadow-soft relative overflow-hidden group transition-all ${diaVisualizado !== diaAtualDoSistema ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
           <div
             className="absolute bottom-0 left-0 right-0 bg-blue-500/10 dark:bg-blue-500/20 transition-all duration-1000 z-0 pointer-events-none"
             style={{ height: `${Math.min((dadosDoDia.totalAgua / 3000) * 100, 100)}%` }}
@@ -414,7 +475,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Sono e Nutrição */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 transition-all ${diaVisualizado !== diaAtualDoSistema ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
           {/* Sono Scorecard */}
           <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-6 rounded-[2.5rem] shadow-soft flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
@@ -434,10 +495,10 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between px-2 py-2 bg-slate-50 dark:bg-black/20 rounded-xl">
               <span className="text-[9px] font-bold uppercase text-slate-400">Status</span>
               <span className="text-[10px] font-black uppercase">
-                {dadosDoDia.sonoHoras < 5 ? <span className="text-red-500">Insuficiente (-15)</span> :
-                  dadosDoDia.sonoHoras < 7 ? <span className="text-yellow-500">Regular (+5)</span> :
-                    dadosDoDia.sonoHoras < 8 ? <span className="text-blue-500">Bom (+9)</span> :
-                      <span className="text-[#CCFF00] dark:text-[#CCFF00]">Excelente (+15)</span>}
+                {dadosDoDia.sonoHoras < 5 ? <span className="text-red-500">Ruim (-4)</span> :
+                  dadosDoDia.sonoHoras < 7 ? <span className="text-yellow-500">Médio (+3)</span> :
+                    dadosDoDia.sonoHoras < 8 ? <span className="text-blue-500">Bom (+5)</span> :
+                      <span className="text-[#CCFF00] dark:text-[#CCFF00]">Ótimo (+8)</span>}
               </span>
             </div>
           </div>
@@ -470,13 +531,13 @@ export default function DashboardPage() {
                 : 'bg-slate-100 dark:bg-white/10 text-slate-400 dark:text-zinc-500 border-slate-200 dark:border-white/5'
                 }`}
             >
-              {dadosDoDia.exagereiHoje ? <><AlertTriangle size={14} /> Fugi da Dieta (-10)</> : 'Dieta Seguida (100%)'}
+              {dadosDoDia.exagereiHoje ? <><AlertTriangle size={14} /> Fugi da Dieta (-5)</> : 'Dieta Seguida (100%)'}
             </button>
           </div>
         </div>
 
         {/* Registro de Atividade */}
-        <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-8 rounded-[2.5rem] shadow-soft">
+        <div className={`bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-8 rounded-[2.5rem] shadow-soft transition-all ${diaVisualizado !== diaAtualDoSistema ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
           <div className="flex items-center gap-3 mb-8">
             <div className="w-1.5 h-4 bg-[#CCFF00] rounded-full" />
             <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none">Registrar Atividade</h3>
@@ -577,15 +638,19 @@ export default function DashboardPage() {
               <Home size={28} strokeWidth={2.5} />
               <span className="text-[10px] font-black uppercase tracking-tighter">Início</span>
             </button>
-            <button className="flex-1 flex flex-col items-center gap-2 py-5 text-slate-400 hover:text-slate-900 dark:text-zinc-600">
-              <Activity size={28} />
-              <span className="text-[10px] font-black uppercase tracking-tighter">Treino</span>
+            <button onClick={() => window.location.href = "/team"} className="flex-1 flex flex-col items-center gap-2 py-5 text-slate-400 hover:text-slate-900 dark:text-zinc-600 dark:hover:text-white transition-all group">
+              <div className="group-hover:scale-110 transition-transform">
+                <Users size={24} />
+              </div>
+              <span className="text-[9px] font-black uppercase tracking-tighter">Equipe</span>
             </button>
-            <button className="flex-1 flex flex-col items-center gap-2 py-5 text-slate-400 hover:text-slate-900 dark:text-zinc-600">
-              <Trophy size={28} />
-              <span className="text-[10px] font-black uppercase tracking-tighter">Ranking</span>
+            <button onClick={() => window.location.href = "/history"} className="flex-1 flex flex-col items-center gap-2 py-5 text-slate-400 hover:text-slate-900 dark:text-zinc-600 dark:hover:text-white transition-all group">
+              <div className="group-hover:scale-110 transition-transform">
+                <HistoryIcon size={24} />
+              </div>
+              <span className="text-[9px] font-black uppercase tracking-tighter">Histórico</span>
             </button>
-            <button onClick={() => window.location.href = "/perfil"} className="flex-1 flex flex-col items-center gap-2 py-5 text-slate-400 hover:text-slate-900 dark:text-zinc-600">
+            <button onClick={() => window.location.href = "/perfil"} className="flex-1 flex flex-col items-center gap-2 py-5 text-slate-400 hover:text-slate-900 dark:text-zinc-600 dark:hover:text-white transition-all group">
               <User size={28} />
               <span className="text-[10px] font-black uppercase tracking-tighter">Perfil</span>
             </button>

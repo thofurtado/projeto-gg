@@ -8,9 +8,17 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum Role {
+  MEMBER
+  GUIDE
+  ADMIN
+}
+
+// Atualizado para Suporte a Times e RBAC
 model User {
   id            String         @id @default(uuid())
   username      String         @unique
+  password      String?        // Adicionado para suportar Auth via Banco
   name          String?
   targetDays    Int            @default(5)
   waterGoal     Int            @default(3000)
@@ -21,19 +29,20 @@ model User {
   biometricLogs BiometricLog[]
   workoutLogs   WorkoutLog[]
   
+  // Team Relation
   teamId        String?
-  team          Team?    @relation(fields: [teamId], references: [id])
-  leadingTeam   Team[]   @relation("TeamLeader")
+  team          Team?    @relation("TeamMembers", fields: [teamId], references: [id])
+  role          Role     @default(MEMBER)
 }
 
 model Team {
   id        String   @id @default(uuid())
   name      String
-  color     String   @default("#CCFF00")
-  leaderId  String?
-  leader    User?    @relation("TeamLeader", fields: [leaderId], references: [id])
-
-  members   User[]
+  color     String   @default("#CCFF00") // Mantendo compatibilidade visual
+  
+  leaderId  String   // ID do criador (Guide/Admin)
+  
+  members   User[]   @relation("TeamMembers")
   
   // Agregados para Ranking
   score     Int      @default(0)
