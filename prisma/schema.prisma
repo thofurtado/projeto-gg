@@ -20,6 +20,27 @@ model User {
   dailyLogs     DailyLog[]
   biometricLogs BiometricLog[]
   workoutLogs   WorkoutLog[]
+  
+  teamId        String?
+  team          Team?    @relation(fields: [teamId], references: [id])
+  leadingTeam   Team[]   @relation("TeamLeader")
+}
+
+model Team {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#CCFF00")
+  leaderId  String?
+  leader    User?    @relation("TeamLeader", fields: [leaderId], references: [id])
+
+  members   User[]
+  
+  // Agregados para Ranking
+  score     Int      @default(0)
+  rank      Int      @default(0)
+  weeklyAvg Float    @default(0)
+
+  createdAt DateTime @default(now())
 }
 
 model DailyLog {

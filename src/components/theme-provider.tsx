@@ -15,13 +15,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const [theme, setTheme] = React.useState<Theme>("light")
 
     React.useEffect(() => {
-        // Check local storage or system preference on mount
+        // REQUISITO: Padrão Light (ignorar sistema operacional)
+        // Verifica apenas se o usuário já salvou 'dark' explicitamente
         const saved = localStorage.getItem("theme_gg") as Theme
-        if (saved) {
-            setTheme(saved)
-            document.documentElement.classList.toggle("dark", saved === "dark")
+
+        if (saved === "dark") {
+            setTheme("dark")
+            document.documentElement.classList.add("dark")
         } else {
-            // Default to Light as requested
+            // Se não tiver salvo ou se for 'light', força Light
             setTheme("light")
             document.documentElement.classList.remove("dark")
         }
@@ -31,7 +33,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         const newTheme = theme === "light" ? "dark" : "light"
         setTheme(newTheme)
         localStorage.setItem("theme_gg", newTheme)
-        document.documentElement.classList.toggle("dark", newTheme === "dark")
+
+        // Atualização imediata do DOM para refletir na UI
+        if (newTheme === "dark") {
+            document.documentElement.classList.add("dark")
+        } else {
+            document.documentElement.classList.remove("dark")
+        }
     }
 
     return (

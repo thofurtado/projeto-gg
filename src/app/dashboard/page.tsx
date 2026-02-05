@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import {
   Activity, Home, User, Droplets, Moon, Trophy,
   Undo, Dumbbell, Loader2, Pizza, CheckCircle2, Sun, Check,
-  MessageSquare, Footprints, Bike, Waves, Wind, Plus, Edit3
+  MessageSquare, Footprints, Bike, Waves, Wind, Plus, Edit3, Swords, AlertTriangle, Trash2, LogOut
 } from "lucide-react"
 import { toast } from "sonner"
 import { storage } from "@/lib/storage"
@@ -26,7 +26,8 @@ const DEFAULT_SESSION = {
   customType: "",
   comment: "",
   points: 0,
-  saved: false
+  saved: false,
+  id: ""
 };
 
 import { useTheme } from "@/components/theme-provider"
@@ -97,8 +98,8 @@ export default function DashboardPage() {
     if (dadosDoDia.ateLegumes) pontuacao += 5;
     if (dadosDoDia.ateProteina) pontuacao += 5;
 
-    // 5. Penalidade (-20)
-    if (dadosDoDia.exagereiHoje) pontuacao -= 20;
+    // 5. Penalidade (-10)
+    if (dadosDoDia.exagereiHoje) pontuacao -= 10;
 
     return Math.max(0, pontuacao); // Nunca negativo visualmente
   }, [dadosDoDia, sessionActivity.points]);
@@ -162,13 +163,14 @@ export default function DashboardPage() {
           if (data.workoutLogs) {
             const session = data.workoutLogs.find((w: any) => w.exercise === 'SESSÃO_DIÁRIA');
             if (session) {
-              const isCustom = !['Musculação', 'Corrida', 'Ciclismo', 'Natação', 'Yoga'].includes(session.modalidade);
+              const isCustom = !['Musculação', 'Caminhada', 'Ciclismo', 'Natação', 'Lutas'].includes(session.modalidade);
               setSessionActivity({
                 type: isCustom ? "Outro" : session.modalidade,
                 customType: isCustom ? session.modalidade : "",
                 comment: session.comment || "",
                 points: session.pointsEarned || 0,
-                saved: true
+                saved: true,
+                id: session.id
               });
             }
           }
@@ -252,7 +254,8 @@ export default function DashboardPage() {
 
       if (res.ok) {
         const result = await res.json();
-        setSessionActivity(prev => ({ ...prev, saved: true, points: result.trainingPoints }));
+        const workoutId = result.workoutId || ""; // Ensure API returns this
+        setSessionActivity(prev => ({ ...prev, saved: true, points: result.trainingPoints, id: workoutId }));
 
         // Update local day score with server result just to be sure
         setDadosDoDia(prev => ({ ...prev, dayScore: result.dayScore }));
@@ -270,6 +273,33 @@ export default function DashboardPage() {
     }
   }
 
+  const deleteActivity = async () => {
+    if (!sessionActivity.id) return;
+
+    if (!window.confirm("Tem certeza que deseja excluir este treino? A pontuação será removida.")) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/daily-log', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workoutLogId: sessionActivity.id })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setSessionActivity(DEFAULT_SESSION);
+        setDadosDoDia(prev => ({ ...prev, dayScore: data.dayScore }));
+        toast.success("Atividade removida com sucesso");
+      } else {
+        toast.error("Erro ao remover atividade");
+      }
+    } catch (e) {
+      toast.error("Erro de conexão");
+    }
+  }
+
 
 
   if (!mounted || loading) {
@@ -282,10 +312,10 @@ export default function DashboardPage() {
 
   const modalidades = [
     { name: "Musculação", icon: <Dumbbell size={20} /> },
-    { name: "Corrida", icon: <Footprints size={20} /> },
+    { name: "Caminhada", icon: <Footprints size={20} /> },
     { name: "Ciclismo", icon: <Bike size={20} /> },
     { name: "Natação", icon: <Waves size={20} /> },
-    { name: "Yoga", icon: <Wind size={20} /> },
+    { name: "Lutas", icon: <Swords size={20} /> },
     { name: "Outro", icon: <Plus size={20} /> } // Custom Activity Button
   ];
 
@@ -307,9 +337,15 @@ export default function DashboardPage() {
           <button onClick={toggleTheme} className="p-3 bg-slate-100 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 active:scale-90 transition-all">
             {theme === 'light' ? <Moon size={18} className="text-slate-600" /> : <Sun size={18} className="text-[#CCFF00]" />}
           </button>
-          <div className="w-14 h-14 bg-[#CCFF00] rounded-2xl flex items-center justify-center shadow-lg shadow-[#CCFF00]/20">
-            <Trophy size={20} className="text-black" />
-          </div>
+          <button
+            onClick={() => {
+              localStorage.removeItem("user_gg");
+              window.location.href = "/";
+            }}
+            className="w-14 h-14 bg-red-500/10 hover:bg-red-500 rounded-2xl flex items-center justify-center border border-red-500/20 transition-all group"
+          >
+            <LogOut size={20} className="text-red-500 group-hover:text-white transition-colors" />
+          </button>
         </div>
       </header>
 
@@ -318,9 +354,14 @@ export default function DashboardPage() {
         {/* Date Selector - Clean UI */}
         <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-[2.5rem] shadow-soft">
           <div className="flex items-center justify-between mb-5 px-3">
-            <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none">Minha Jornada</h3>
-            <span className="text-[10px] font-bold text-slate-900 dark:text-white uppercase leading-none italic">
-              {diaVisualizado === diaAtualDoSistema ? 'Hoje' : `Dia ${diaVisualizado}`}
+            <div className="flex flex-col w-full mr-4">
+              <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none mb-2">Dia {diaVisualizado} <span className="text-slate-300 dark:text-white/20">/ 120</span></h3>
+              <div className="w-full bg-slate-100 dark:bg-white/5 h-1.5 rounded-full overflow-hidden">
+                <div className="h-full bg-[#CCFF00]" style={{ width: `${(diaVisualizado / 120) * 100}%` }} />
+              </div>
+            </div>
+            <span className="text-[9px] font-black text-slate-300 dark:text-white/30 uppercase leading-none italic whitespace-nowrap">
+              {diaVisualizado === diaAtualDoSistema ? 'HOJE' : 'VISUALIZANDO'}
             </span>
           </div>
           <div className="flex justify-between items-center px-2">
@@ -425,11 +466,11 @@ export default function DashboardPage() {
             <button
               onClick={() => syncWithServer({ exagereiHoje: !dadosDoDia.exagereiHoje })}
               className={`w-full mt-5 py-3 rounded-2xl border transition-all flex items-center justify-center gap-2 font-black text-[9px] uppercase ${dadosDoDia.exagereiHoje
-                  ? 'bg-red-500 text-white border-red-500 shadow-md shadow-red-500/20'
-                  : 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-500/30'
+                ? 'bg-red-500 text-white border-red-500 shadow-md shadow-red-500/20'
+                : 'bg-slate-100 dark:bg-white/10 text-slate-400 dark:text-zinc-500 border-slate-200 dark:border-white/5'
                 }`}
             >
-              {dadosDoDia.exagereiHoje ? 'Furei a Dieta (-20 pts)' : 'Dieta Seguida (100%)'}
+              {dadosDoDia.exagereiHoje ? <><AlertTriangle size={14} /> Fugi da Dieta (-10)</> : 'Dieta Seguida (100%)'}
             </button>
           </div>
         </div>
@@ -509,12 +550,21 @@ export default function DashboardPage() {
                   "{sessionActivity.comment}"
                 </div>
               )}
-              <button
-                onClick={() => setSessionActivity(prev => ({ ...prev, saved: false }))}
-                className="text-[10px] font-black uppercase text-slate-400 underline hover:text-[#CCFF00]"
-              >
-                Editar ou Corrigir
-              </button>
+              <div className="flex gap-4 justify-center w-full">
+                <button
+                  onClick={() => setSessionActivity(prev => ({ ...prev, saved: false }))}
+                  className="text-[10px] font-black uppercase text-slate-400 underline hover:text-[#CCFF00]"
+                >
+                  Editar ou Corrigir
+                </button>
+                <button
+                  onClick={deleteActivity}
+                  className="group/trash p-2 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                  title="Excluir Atividade"
+                >
+                  <Trash2 size={16} className="text-slate-300 group-hover/trash:text-red-500 transition-colors" />
+                </button>
+              </div>
             </div>
           )}
         </div>
