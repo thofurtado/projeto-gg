@@ -1,26 +1,18 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+// Tabela Oficial: 1º=25, 2º=20, 3º=13, 4º=9, 5º=7, 6º=6, 7º=10
 const TRAINING_GAINS = [25, 20, 13, 9, 7, 6, 10]
 
+// Função auxiliar para garantir datas sempre em UTC Midnight
 function normalizeDate(dateStr: string) {
     if (!dateStr) return new Date();
-    // UTC Midnight strict parsing
     const dateObj = new Date(dateStr)
+    // Força a data para UTC mantendo o dia selecionado pelo usuário
     const year = dateObj.getUTCFullYear()
     const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0')
     const day = String(dateObj.getUTCDate()).padStart(2, '0')
     return new Date(`${year}-${month}-${day}T00:00:00.000Z`)
-}
-
-function getWeekStart(date: Date) {
-    const d = new Date(date)
-    const day = d.getUTCDay()
-    const diff = d.getUTCDate() - day
-    const sunday = new Date(d)
-    sunday.setUTCDate(diff)
-    sunday.setUTCHours(0, 0, 0, 0)
-    return sunday
 }
 
 export async function POST(req: Request) {
@@ -30,7 +22,7 @@ export async function POST(req: Request) {
 
         if (!username || !date) return NextResponse.json({ error: 'Dados incompletos' }, { status: 400 })
 
-        // 1. Provisionamento de Usuário (Garante que nunca falhe por falta de user)
+        // 1. Provisionamento de Usuário
         let user = await prisma.user.findUnique({ where: { username } })
         if (!user) {
             user = await prisma.user.create({
@@ -38,94 +30,107 @@ export async function POST(req: Request) {
             })
         }
 
-        const logDate = normalizeDate(date)
+        const logDateObj = normalizeDate(date)
 
-        // --- LÓGICA DE TREINO REESCRITA (CONTAGEM ABSOLUTA) ---
+        // --- LÓGICA DE TREINO CORRIGIDA (CONTAGEM ABSOLUTA) ---
         let pointsFromTraining = 0
-        if (sessionActivity) {
-            // 1. Definição Robusta da Semana (Domingo 00:00 UTC - Próximo Domingo 00:00 UTC)
-            const logDateObj = normalizeDate(date)
 
+        if (sessionActivity) {
+            // A. Definir o intervalo da semana (Domingo a Sábado) em UTC
             const weekStart = new Date(logDateObj)
-            const dayOfWeek = weekStart.getUTCDay()
+            const dayOfWeek = weekStart.getUTCDay() // 0 (Domingo) a 6 (Sábado)
             weekStart.setUTCDate(weekStart.getUTCDate() - dayOfWeek)
             weekStart.setUTCHours(0, 0, 0, 0)
 
             const weekEnd = new Date(weekStart)
-            weekEnd.setUTCDate(weekEnd.getUTCDate() + 7)
+            weekEnd.setUTCDate(weekEnd.getUTCDate() + 7) // Próximo Domingo (exclusive)
 
-            // 2. Busca de Logs (Sem Deletar Antes) para garantir contagem correta da HISTÓRIA
+            // B. Buscar TODOS os logs da semana (SEM apagar nada antes)
             const weekLogs = await prisma.workoutLog.findMany({
                 where: {
                     userId: user.id,
-                    date: { gte: weekStart, lt: weekEnd }
+                    date: {
+                        gte: weekStart,
+                        lt: weekEnd
+                    }
                 },
                 select: { date: true }
             })
 
-            // 3. Cálculo da Frequência (Na Memória)
-            // Cria Set com datas existentes + DATA ATUAL (Crucial: garante que 'hoje' conte como +1)
-            const uniqueDays = new Set(weekLogs.map(log => log.date.toISOString().split('T')[0]))
-            uniqueDays.add(logDateObj.toISOString().split('T')[0])
+            // C. Contar dias ÚNICOS na semana
+            // Transformamos em string YYYY-MM-DD para evitar duplicidade de horas
+            const uniqueDaysSet = new Set(weekLogs.map(log => log.date.toISOString().split('T')[0]))
 
-            const weeklyCount = uniqueDays.size
+            // TRUQUE DO MESTRE: Adicionamos o dia de HOJE na lista na memória.
+            // Isso garante que, mesmo que o banco esteja vazio hoje (ou vamos sobrescrever),
+            // a contagem de hoje será considerada.
+            uniqueDaysSet.add(logDateObj.toISOString().split('T')[0])
 
-            // 4. Determinação dos Pontos
-            // Index 0 -> 1º dia (size 1)
-            // Index 3 -> 4º dia (size 4)
+            const weeklyCount = uniqueDaysSet.size
+
+            // D. Calcular Pontos
+            // Se weeklyCount é 1 (só hoje), pegamos index 0. 
+            // Se weeklyCount é 4 (3 anteriores + hoje), pegamos index 3.
+            // Limitamos ao tamanho do array para não quebrar.
             const index = Math.max(0, Math.min(weeklyCount - 1, TRAINING_GAINS.length - 1))
             pointsFromTraining = TRAINING_GAINS[index]
 
-            console.log(`[DEBUG_SCORE_V2] Date:${logDateObj.toISOString()} | WeekCount:${weeklyCount} | Index:${index} | Points:${pointsFromTraining}`)
+            console.log(`[DEBUG] Data: ${logDateObj.toISOString().split('T')[0]} | Contagem Semanal: ${weeklyCount} | Pontos: ${pointsFromTraining}`)
 
-            // 5. Persistência (Delete anterior do dia + Create novo com pontos calculados)
+            // E. Agora sim, limpamos qualquer registro ANTERIOR deste mesmo dia para evitar duplicata
             const dayStart = new Date(logDateObj)
             const dayEnd = new Date(logDateObj)
-            dayEnd.setDate(dayEnd.getDate() + 1)
+            dayEnd.setUTCDate(dayEnd.getUTCDate() + 1)
 
-            // Upsert Manual via Transação
-            await prisma.$transaction([
-                prisma.workoutLog.deleteMany({
-                    where: {
-                        userId: user.id,
-                        date: { gte: dayStart, lt: dayEnd }
-                    }
-                }),
-                prisma.workoutLog.create({
-                    data: {
-                        userId: user.id,
-                        date: logDateObj,
-                        modalidade: sessionActivity.type,
-                        exercise: 'SESSÃO_DIÁRIA',
-                        performed: 1,
-                        unit: 'sessão',
-                        comment: sessionActivity.comment,
-                        pointsEarned: pointsFromTraining
-                    }
-                })
-            ])
+            await prisma.workoutLog.deleteMany({
+                where: {
+                    userId: user.id,
+                    date: { gte: dayStart, lt: dayEnd }
+                }
+            })
+
+            // F. Salvar o novo treino com a pontuação calculada
+            await prisma.workoutLog.create({
+                data: {
+                    userId: user.id,
+                    date: logDateObj,
+                    modalidade: sessionActivity.type,
+                    exercise: 'SESSÃO_DIÁRIA',
+                    performed: 1,
+                    unit: 'sessão',
+                    comment: sessionActivity.comment,
+                    pointsEarned: pointsFromTraining
+                }
+            })
+
         } else {
-            // Modo leitura/update de outras métricas sem alterar treino
+            // Modo apenas atualização de métricas (água/sono), mantém os pontos de treino existentes
             const existing = await prisma.workoutLog.findFirst({
-                where: { userId: user.id, date: normalizeDate(date) }
+                where: {
+                    userId: user.id,
+                    date: logDateObj // Usando logDateObj normalizado
+                }
             })
             pointsFromTraining = existing?.pointsEarned || 0
         }
 
-        // --- CÁLCULO DE PLACAR ---
+        // --- CÁLCULO DO PLACAR DO DIA (MÉTRICAS + TREINO) ---
         let scoringPoints = 0
         const waterVal = metrics?.waterMl || 0
         const sleepVal = metrics?.sleepHours || 0
 
+        // Regra Água
         if (waterVal >= (user.waterGoal || 3000)) scoringPoints += 15
 
+        // Regra Sono
         if (sleepVal > 0) {
             if (sleepVal < 5) scoringPoints -= 15
             else if (sleepVal < 7) scoringPoints += 5
-            else if (sleepVal < 8) scoringPoints += 9
-            else scoringPoints += 15 // Covers 8 and above correctly
+            else if (sleepVal < 8) scoringPoints += 9 // 7h a 7h59 = 17 pontos totais (exemplo original dizia 17, aqui soma +9 ao base? Ajuste conforme sua regra exata de sono)
+            else scoringPoints += 15 // 8h+ = 20 pontos totais (se considerar base)
         }
 
+        // Regra Alimentação
         if (metrics?.ateFruits) scoringPoints += 5
         if (metrics?.ateVeggies) scoringPoints += 5
         if (metrics?.ateProtein) scoringPoints += 5
@@ -146,11 +151,11 @@ export async function POST(req: Request) {
         if (metrics?.calorieAbuse !== undefined) updateData.calorieAbuse = metrics.calorieAbuse
 
         await prisma.dailyLog.upsert({
-            where: { userId_date: { userId: user.id, date: logDate } },
+            where: { userId_date: { userId: user.id, date: logDateObj } },
             update: updateData,
             create: {
                 userId: user.id,
-                date: logDate,
+                date: logDateObj,
                 waterMl: metrics?.waterMl || 0,
                 sleepHours: metrics?.sleepHours || 0,
                 ateFruits: metrics?.ateFruits || false,
@@ -177,19 +182,17 @@ export async function DELETE(req: Request) {
 
         if (!workoutLogId) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
 
-        // 1. Get Log Info before deleting
         const log = await prisma.workoutLog.findUnique({
             where: { id: workoutLogId }
         })
 
         if (!log) return NextResponse.json({ error: 'Log not found' }, { status: 404 })
 
-        // 2. Delete Log
         await prisma.workoutLog.delete({
             where: { id: workoutLogId }
         })
 
-        // 3. Recalculate Day Score (Decrement is safer than full recalc here to avoid race conditions with other metrics)
+        // Decrementa pontuação do dia ao remover o treino
         const updatedDaily = await prisma.dailyLog.update({
             where: {
                 userId_date: { userId: log.userId, date: log.date }
