@@ -5,6 +5,8 @@ import { toast } from "sonner"
 import { storage } from "@/lib/storage"
 import { useTheme } from "@/components/theme-provider"
 
+// ... (imports remain)
+
 export default function ProfilePage() {
     const [mounted, setMounted] = useState(false)
     const [username, setUsername] = useState("")
@@ -142,12 +144,10 @@ export default function ProfilePage() {
 
             toast.success("Evolução registrada com sucesso!")
 
-            // Se for o primeiro registro (histórico vazio), libera o Dashboard
-            if (history.length === 0) {
-                setTimeout(() => {
-                    window.location.href = "/dashboard"
-                }, 1000)
-            }
+            // Redireciona sempre, independente se é o primeiro registro ou atualização
+            setTimeout(() => {
+                window.location.href = "/dashboard"
+            }, 1000)
 
         } catch (err: any) {
             console.error("Erro handleSave:", err)
@@ -156,36 +156,6 @@ export default function ProfilePage() {
             setLoading(false)
         }
     }
-
-    // Smart Navigation Logic
-    const [navVisible, setNavVisible] = useState(true)
-    const navTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-    // Detecção de Atividade para Auto-Hide
-    useEffect(() => {
-        const resetNav = () => {
-            setNavVisible(true)
-            if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current)
-            navTimeoutRef.current = setTimeout(() => {
-                setNavVisible(false)
-            }, 3000)
-        }
-
-        // Eventos que "acordam" a nav
-        window.addEventListener('scroll', resetNav)
-        window.addEventListener('touchstart', resetNav)
-        window.addEventListener('click', resetNav)
-
-        // Timer inicial
-        resetNav()
-
-        return () => {
-            window.removeEventListener('scroll', resetNav)
-            window.removeEventListener('touchstart', resetNav)
-            window.removeEventListener('click', resetNav)
-            if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current)
-        }
-    }, [])
 
     if (!mounted || loading) {
         return (
@@ -196,37 +166,47 @@ export default function ProfilePage() {
     }
 
     const Control = ({ field, step, label, unit, icon: Icon, isSmall = false }: any) => (
-        <div className={`bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 p-4 rounded-[2rem] flex flex-col items-center justify-center shadow-soft ${isSmall ? 'py-3' : 'py-5'}`}>
-            <span className="text-[10px] font-black uppercase text-slate-400 dark:text-zinc-500 mb-3 tracking-widest flex items-center gap-1.5 leading-none">
-                {Icon && <Icon size={12} />} {label}
-            </span>
-            <div className="flex items-center gap-5">
-                <button type="button" onTouchStart={() => startHold(field, -step)} onTouchEnd={stopHold} onMouseDown={() => startHold(field, -step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-10 h-10 flex items-center justify-center bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-2xl active:bg-red-500 active:text-white transition-all shrink-0 shadow-sm">
-                    <Minus size={18} />
-                </button>
-                <div className="flex flex-col items-center min-w-[80px]">
-                    <input
-                        type="number"
-                        step={step}
-                        value={(formData as any)[field]}
-                        onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            // Garante que é um número válido ou 0, evitando NaN visual
-                            setFormData(prev => ({ ...prev, [field]: isNaN(val) ? 0 : parseFloat(val.toFixed(1)) }));
-                        }}
-                        className={`w-full bg-transparent border-none text-center outline-none ${isSmall ? 'text-2xl' : 'text-4xl'} font-black italic text-slate-900 dark:text-white p-0 leading-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
-                    />
-                    <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-600 uppercase mt-1">{unit}</span>
-                </div>
-                <button type="button" onTouchStart={() => startHold(field, step)} onTouchEnd={stopHold} onMouseDown={() => startHold(field, step)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-10 h-10 flex items-center justify-center bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-2xl active:bg-[#CCFF00] active:text-black transition-all shrink-0 shadow-sm">
-                    <Plus size={18} />
-                </button>
+        <div className={`bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 p-4 rounded-[2rem] flex items-center justify-between shadow-soft ${isSmall ? 'py-4' : 'py-6'}`}>
+            <button
+                type="button"
+                onTouchStart={() => startHold(field, -step)} onTouchEnd={stopHold}
+                onMouseDown={() => startHold(field, -step)} onMouseUp={stopHold} onMouseLeave={stopHold}
+                className="w-12 h-12 flex items-center justify-center bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-2xl active:bg-red-500 active:text-white transition-all shrink-0 shadow-sm hover:bg-slate-200 dark:hover:bg-zinc-700"
+            >
+                <Minus size={20} />
+            </button>
+
+            <div className="flex flex-col items-center flex-1 px-2">
+                <span className="text-[10px] font-black uppercase text-slate-400 dark:text-zinc-500 tracking-widest flex items-center gap-1.5 leading-none mb-1">
+                    {Icon && <Icon size={12} />} {label}
+                </span>
+                <input
+                    type="number"
+                    step={step}
+                    value={(formData as any)[field]}
+                    onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setFormData(prev => ({ ...prev, [field]: isNaN(val) ? 0 : parseFloat(val.toFixed(1)) }));
+                    }}
+                    className={`w-full bg-transparent border-none text-center outline-none ${isSmall ? 'text-2xl' : 'text-4xl'} font-black italic text-slate-900 dark:text-white p-0 leading-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                />
+                <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-600 uppercase mt-1">{unit}</span>
             </div>
+
+            <button
+                type="button"
+                onTouchStart={() => startHold(field, step)} onTouchEnd={stopHold}
+                onMouseDown={() => startHold(field, step)} onMouseUp={stopHold} onMouseLeave={stopHold}
+                className="w-12 h-12 flex items-center justify-center bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-2xl active:bg-[#CCFF00] active:text-black transition-all shrink-0 shadow-sm hover:bg-slate-200 dark:hover:bg-zinc-700"
+            >
+                <Plus size={20} />
+            </button>
         </div>
     )
 
     return (
         <div className={`min-h-screen bg-slate-50 dark:bg-black text-slate-900 dark:text-white font-sans selection:bg-[#CCFF00]/30 antialiased transition-colors duration-300`}>
+            {/* ... HEADER ... */}
             <header className="p-5 flex justify-between items-center bg-white/80 dark:bg-black/80 backdrop-blur-3xl border-b border-slate-200 dark:border-zinc-900 sticky top-0 z-50 shadow-sm">
                 <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-[#CCFF00] rounded-2xl flex items-center justify-center text-black font-black italic shadow-lg shadow-[#CCFF00]/20 active:scale-95 transition-all">GG</div>
@@ -253,31 +233,46 @@ export default function ProfilePage() {
                             <div className="w-1.5 h-4 bg-[#CCFF00] rounded-full" />
                             <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-zinc-500">Status Biométrico</h2>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Control field="weight" step={0.1} label="Peso Atual" unit="kg" />
                             <Control field="height" step={0.1} label="Estatura" unit="cm" />
                         </div>
-                        <div className="bg-white dark:bg-blue-600/5 border border-slate-200 dark:border-blue-500/10 p-8 rounded-[3rem] shadow-soft relative overflow-hidden group">
+
+                        {/* Meta de Hidratação Card */}
+                        <div className="bg-white dark:bg-blue-600/5 border border-slate-200 dark:border-blue-500/10 p-6 rounded-[3rem] shadow-soft relative overflow-hidden group flex items-center justify-between">
                             <div className="absolute -right-6 -top-6 opacity-[0.03] dark:opacity-[0.03] pointer-events-none group-hover:scale-110 transition-transform">
                                 <Droplets size={160} />
                             </div>
-                            <span className="text-blue-500 text-[10px] font-black uppercase mb-6 flex items-center gap-2 italic tracking-[0.2em]">
-                                <Droplets size={16} /> Meta de Hidratação
-                            </span>
-                            <div className="flex items-center justify-center gap-6">
-                                <button onTouchStart={() => startHold('waterMeta', -100)} onTouchEnd={stopHold} onMouseDown={() => startHold('waterMeta', -100)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-14 h-14 bg-slate-50 dark:bg-zinc-900 rounded-[1.5rem] border border-slate-200 dark:border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-white transition-all shrink-0 shadow-sm"><Minus size={24} /></button>
-                                <div className="text-center w-[140px]">
-                                    <input
-                                        type="number"
-                                        step="100"
-                                        value={formData.waterMeta}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, waterMeta: parseInt(e.target.value) || 0 }))}
-                                        className="w-full bg-transparent border-none text-center outline-none text-6xl font-black italic text-slate-900 dark:text-white leading-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none tabular-nums"
-                                    />
-                                    <p className="text-[10px] font-bold text-blue-500/50 uppercase mt-2 tracking-widest">Mililitros</p>
-                                </div>
-                                <button onTouchStart={() => startHold('waterMeta', 100)} onTouchEnd={stopHold} onMouseDown={() => startHold('waterMeta', 100)} onMouseUp={stopHold} onMouseLeave={stopHold} className="w-14 h-14 bg-slate-50 dark:bg-zinc-900 rounded-[1.5rem] border border-slate-200 dark:border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-white transition-all shrink-0 shadow-sm"><Plus size={24} /></button>
+
+                            <button
+                                onTouchStart={() => startHold('waterMeta', -100)} onTouchEnd={stopHold}
+                                onMouseDown={() => startHold('waterMeta', -100)} onMouseUp={stopHold} onMouseLeave={stopHold}
+                                className="w-14 h-14 relative z-10 bg-slate-50 dark:bg-zinc-900 rounded-[1.5rem] border border-slate-200 dark:border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-white transition-all shrink-0 shadow-sm hover:bg-slate-100 dark:hover:bg-zinc-800"
+                            >
+                                <Minus size={24} />
+                            </button>
+
+                            <div className="flex flex-col items-center relative z-10 flex-1 px-4">
+                                <span className="text-blue-500 text-[10px] font-black uppercase mb-1 flex items-center gap-2 italic tracking-[0.2em]">
+                                    <Droplets size={16} /> Meta
+                                </span>
+                                <input
+                                    type="number"
+                                    step="100"
+                                    value={formData.waterMeta}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, waterMeta: parseInt(e.target.value) || 0 }))}
+                                    className="w-full bg-transparent border-none text-center outline-none text-5xl font-black italic text-slate-900 dark:text-white leading-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none tabular-nums"
+                                />
+                                <p className="text-[10px] font-bold text-blue-500/50 uppercase mt-1 tracking-widest">Mililitros</p>
                             </div>
+
+                            <button
+                                onTouchStart={() => startHold('waterMeta', 100)} onTouchEnd={stopHold}
+                                onMouseDown={() => startHold('waterMeta', 100)} onMouseUp={stopHold} onMouseLeave={stopHold}
+                                className="w-14 h-14 relative z-10 bg-slate-50 dark:bg-zinc-900 rounded-[1.5rem] border border-slate-200 dark:border-zinc-800 flex items-center justify-center active:bg-blue-500 active:text-white transition-all shrink-0 shadow-sm hover:bg-slate-100 dark:hover:bg-zinc-800"
+                            >
+                                <Plus size={24} />
+                            </button>
                         </div>
                     </div>
 
@@ -286,7 +281,7 @@ export default function ProfilePage() {
                             <div className="w-1.5 h-4 bg-slate-200 dark:bg-zinc-800 rounded-full" />
                             <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-zinc-500">Medidas Corporais</h2>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Control field="waist" step={0.1} label="Cintura" unit="cm" isSmall icon={Ruler} />
                             <Control field="chest" step={0.1} label="Peitoral" unit="cm" isSmall />
                             <Control field="bicepL" step={0.1} label="Bíceps Esq." unit="cm" isSmall />
@@ -322,29 +317,6 @@ export default function ProfilePage() {
                     )}
                 </div>
             </main>
-
-            <footer className={`fixed bottom-0 left-0 right-0 z-50 px-6 pb-6 pointer-events-none transition-all duration-500 ease-in-out ${navVisible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
-                <div className="max-w-[500px] mx-auto pointer-events-auto">
-                    <div className="bg-white/95 dark:bg-[#1a1c21]/95 border border-slate-200 dark:border-white/10 p-2.5 rounded-[3rem] flex items-center justify-between shadow-2xl backdrop-blur-3xl ring-1 ring-black/5 dark:ring-white/5">
-                        <button onClick={() => window.location.href = "/dashboard"} className="flex-1 flex flex-col items-center gap-2 py-5 text-slate-400 dark:text-zinc-600 hover:text-slate-900 dark:hover:text-white transition-all group">
-                            <Home size={24} className="group-hover:scale-110 transition-transform" />
-                            <span className="text-[9px] font-black uppercase tracking-tighter">Arena</span>
-                        </button>
-                        <button onClick={() => window.location.href = "/dashboard"} className="flex-1 flex flex-col items-center gap-2 py-5 text-slate-400 dark:text-zinc-600 hover:text-slate-900 dark:hover:text-white transition-all group">
-                            <Activity size={24} className="group-hover:scale-110 transition-transform" />
-                            <span className="text-[9px] font-black uppercase tracking-tighter">Treino</span>
-                        </button>
-                        <button className="flex-1 flex flex-col items-center gap-2 py-5 text-slate-400 dark:text-zinc-600 hover:text-slate-900 dark:hover:text-white transition-all group">
-                            <Trophy size={24} className="group-hover:scale-110 transition-transform" />
-                            <span className="text-[9px] font-black uppercase tracking-tighter">Leader</span>
-                        </button>
-                        <button className="flex-1 flex flex-col items-center gap-2 py-5 bg-[#CCFF00] text-black rounded-[2.5rem] shadow-xl transition-all active:scale-95 hover:shadow-[#CCFF00]/20">
-                            <User size={24} strokeWidth={2.5} />
-                            <span className="text-[9px] font-black uppercase tracking-tighter">Perfil</span>
-                        </button>
-                    </div>
-                </div>
-            </footer>
         </div>
     )
 }

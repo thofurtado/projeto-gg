@@ -91,6 +91,7 @@ export default function DashboardPage() {
   }, [])
 
   // --- CORREÇÃO AQUI: LÓGICA DE PLACAR VISUAL IGUAL AO BACKEND ---
+  // --- CORREÇÃO AQUI: LÓGICA DE PLACAR VISUAL IGUAL AO BACKEND ---
   const calcularPlacarEmTempoReal = useCallback(() => {
     let pontuacao = 0;
     const metaAgua = userData.config.metaAgua || 3000;
@@ -101,15 +102,13 @@ export default function DashboardPage() {
     // 2. Água (4pts Meta Cheia | 1.5pts Meia Meta | -1pt Abaixo)
     if (dadosDoDia.totalAgua >= metaAgua) pontuacao += 4;
     else if (dadosDoDia.totalAgua >= (metaAgua / 2)) pontuacao += 1.5;
-    else pontuacao -= 1; // Igual ao backend route.ts que você mandou
+    else pontuacao -= 1;
 
-    // 3. Sono (<5h: -4 | 5h-7h: +3 | 7h-8h: +5 | 8h+: +8)
-    if (dadosDoDia.sonoHoras > 0) {
-      if (dadosDoDia.sonoHoras < 5) pontuacao -= 4;
-      else if (dadosDoDia.sonoHoras < 7) pontuacao += 3;
-      else if (dadosDoDia.sonoHoras < 8) pontuacao += 5;
-      else pontuacao += 8;
-    }
+    // 3. Sono (FIX: 0h agora penaliza como <5h)
+    if (dadosDoDia.sonoHoras < 5) pontuacao -= 4;
+    else if (dadosDoDia.sonoHoras < 7) pontuacao += 3;
+    else if (dadosDoDia.sonoHoras < 8) pontuacao += 5;
+    else pontuacao += 8;
 
     // 4. Nutrição (+2 cada)
     if (dadosDoDia.ateFrutas) pontuacao += 2;
@@ -119,10 +118,7 @@ export default function DashboardPage() {
     // 5. Penalidade (-5)
     if (dadosDoDia.exagereiHoje) pontuacao -= 5;
 
-    // Permite negativo visualmente se necessário, ou trava em 0.
-    // O backend permite negativo? Se sim, remova o Math.max.
-    // Vou manter Math.max(0) para ficar bonito na UI.
-    return Math.max(0, pontuacao);
+    return pontuacao;
   }, [dadosDoDia, sessionActivity.points, userData.config.metaAgua]);
 
   // Init
@@ -144,17 +140,25 @@ export default function DashboardPage() {
           body: JSON.stringify({ username: storedUser })
         })
 
-        if (!res.ok) {
-          throw new Error("Usuário inválido ou deletado")
+        // CRUCIAL: Se der erro de rede (offline) ou 500, o fetch não joga erro (exceto network), 
+        // mas res.ok será false.
+
+        if (res.ok) {
+          const data = await res.json()
+          if (!data.valid) {
+            // Respondeu 200 mas disse inválido (logica nossa)
+            // Ou se respondeu 404
+            throw new Error("AUTH_INVALID")
+          }
+        } else if (res.status === 404 || res.status === 401) {
+          // Resposta explicita de não autorizado
+          throw new Error("AUTH_INVALID")
+        } else {
+          // Se for 500 ou outro erro genérico, assumimos "Offline Mode" ou erro temporário
+          console.warn("API Check falhou, mas permitindo acesso (Modo Offline/Dev)")
         }
 
-        const data = await res.json()
-
-        if (!data.valid) {
-          throw new Error("Usuário não encontrado")
-        }
-
-        // 3. Sucesso: Configura estados
+        // 3. Sucesso (ou Fail-Open): Configura estados
         const currentDay = getWeekDayIndex()
         setDiaAtualDoSistema(currentDay)
         setDiaVisualizado(currentDay)
@@ -164,11 +168,24 @@ export default function DashboardPage() {
         setVerifyingSession(false)
         setLoading(false)
 
-      } catch (error) {
-        // 4. Falha de Segurança: Limpa tudo e manda pro login
-        console.error("Sessão inválida:", error)
-        localStorage.removeItem("user_gg")
-        window.location.href = "/"
+      } catch (error: any) {
+        // Só desloga se for erro de autenticação explícito
+        if (error.message === "AUTH_INVALID") {
+          console.error("Sessão inválida:", error)
+          localStorage.removeItem("user_gg")
+          window.location.href = "/"
+        } else {
+          // Erro de conexão ou outro: Deixa entrar (Fail Open)
+          console.warn("Erro de conexão na verificação. Permitindo acesso.", error)
+          const currentDay = getWeekDayIndex()
+          setDiaAtualDoSistema(currentDay)
+          setDiaVisualizado(currentDay)
+          setUserData(prev => ({ ...prev, username: storedUser }))
+
+          setMounted(true)
+          setVerifyingSession(false)
+          setLoading(false)
+        }
       }
     }
 
@@ -334,6 +351,7 @@ export default function DashboardPage() {
     }
   }
 
+  // Função de Deleção Corrigida
   const deleteActivity = async () => {
     if (!sessionActivity.id) return;
 
@@ -345,12 +363,13 @@ export default function DashboardPage() {
       const res = await fetch('/api/daily-log', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workoutLogId: sessionActivity.id })
+        body: JSON.stringify({ workoutLogId: sessionActivity.id }) // Padronizado para workoutLogId
       });
 
       if (res.ok) {
         const data = await res.json();
         setSessionActivity(DEFAULT_SESSION);
+        // Atualiza o dadosDoDia com o novo score retornado pelo backend
         setDadosDoDia(prev => ({ ...prev, dayScore: data.dayScore }));
         toast.success("Atividade removida com sucesso");
       } else {
@@ -524,15 +543,33 @@ export default function DashboardPage() {
                 </button>
               ))}
             </div>
-            <button
-              onClick={() => syncWithServer({ exagereiHoje: !dadosDoDia.exagereiHoje })}
-              className={`w-full mt-5 py-3 rounded-2xl border transition-all flex items-center justify-center gap-2 font-black text-[9px] uppercase ${dadosDoDia.exagereiHoje
-                ? 'bg-red-500 text-white border-red-500 shadow-md shadow-red-500/20'
-                : 'bg-slate-100 dark:bg-white/10 text-slate-400 dark:text-zinc-500 border-slate-200 dark:border-white/5'
-                }`}
-            >
-              {dadosDoDia.exagereiHoje ? <><AlertTriangle size={14} /> Fugi da Dieta (-5)</> : 'Dieta Seguida (100%)'}
-            </button>
+            {/* Diet Toggle Switch */}
+            <div className="mt-6 flex items-center justify-between bg-slate-50 dark:bg-white/5 p-4 rounded-3xl border border-slate-100 dark:border-white/5">
+              <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Fugi da Dieta hoje?</span>
+
+              <button
+                onClick={() => syncWithServer({ exagereiHoje: !dadosDoDia.exagereiHoje })}
+                className={`relative w-14 h-8 rounded-full transition-colors duration-300 ${dadosDoDia.exagereiHoje ? 'bg-red-500' : 'bg-green-500/20'
+                  }`}
+              >
+                <div
+                  className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 flex items-center justify-center ${dadosDoDia.exagereiHoje ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                >
+                  {dadosDoDia.exagereiHoje ? (
+                    <AlertTriangle size={12} className="text-red-500" />
+                  ) : (
+                    <Check size={12} className="text-green-500" />
+                  )}
+                </div>
+              </button>
+            </div>
+
+            {dadosDoDia.exagereiHoje && (
+              <div className="mt-2 text-center animate-in fade-in slide-in-from-top-1">
+                <span className="text-[9px] font-bold text-red-500 uppercase tracking-widest">-5 Pontos (Penalidade)</span>
+              </div>
+            )}
           </div>
         </div>
 
