@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 export async function POST(req: Request) {
     try {
         const body = await req.json()
-        const { username, weight, height, waist, chest, bicepL, bicepR, waterMeta } = body
+        const { username, weight, height, waist, chest, bicepL, bicepR, waterMeta, gender, age } = body
 
         if (!username) {
             return NextResponse.json({ error: 'Username é obrigatório' }, { status: 400 })
@@ -20,14 +20,22 @@ export async function POST(req: Request) {
             user = await prisma.user.create({
                 data: {
                     username,
-                    waterGoal: waterMeta ? Number(waterMeta) : 3000
+                    waterGoal: waterMeta ? Number(waterMeta) : 3000,
+                    gender: gender || "M",
+                    age: age ? Number(age) : 25,
+                    profileCompleted: true
                 }
             })
         } else if (waterMeta) {
             // Atualiza meta se user já existir
             await prisma.user.update({
                 where: { id: user.id },
-                data: { waterGoal: Number(waterMeta) }
+                data: {
+                    waterGoal: Number(waterMeta),
+                    gender: gender || undefined,
+                    age: age ? Number(age) : undefined,
+                    profileCompleted: true
+                }
             })
         }
 
@@ -49,7 +57,7 @@ export async function POST(req: Request) {
         const history = await prisma.biometricLog.findMany({
             where: { userId: user.id },
             orderBy: { createdAt: 'desc' },
-            take: 5
+            take: 30
         })
 
         return NextResponse.json({ success: true, log, history })

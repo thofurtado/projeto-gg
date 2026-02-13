@@ -4,8 +4,63 @@ import { Save, Dumbbell, Trophy, ArrowRight, Plus, Minus, Droplets, Ruler, Weigh
 import { toast } from "sonner"
 import { storage } from "@/lib/storage"
 import { useTheme } from "@/components/theme-provider"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 // ... (imports remain)
+
+// Standalone component to prevent re-render focus issues
+interface ControlProps {
+    value: number
+    label: string
+    unit: string
+    step: number
+    icon?: any
+    isSmall?: boolean
+    onChange: (val: number) => void
+    onHoldStart: (step: number) => void
+    onHoldStop: () => void
+}
+
+const ProfileControl = ({ value, label, unit, step, icon: Icon, isSmall = false, onChange, onHoldStart, onHoldStop }: ControlProps) => {
+    return (
+        <div className={`bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 p-4 rounded-[2rem] flex items-center justify-between shadow-soft ${isSmall ? 'py-4' : 'py-6'}`}>
+            <button
+                type="button"
+                onTouchStart={() => onHoldStart(-step)} onTouchEnd={onHoldStop}
+                onMouseDown={() => onHoldStart(-step)} onMouseUp={onHoldStop} onMouseLeave={onHoldStop}
+                className="w-12 h-12 flex items-center justify-center bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-2xl active:bg-red-500 active:text-white transition-all shrink-0 shadow-sm hover:bg-slate-200 dark:hover:bg-zinc-700"
+            >
+                <Minus size={20} />
+            </button>
+
+            <div className="flex flex-col items-center flex-1 px-2">
+                <span className="text-[10px] font-black uppercase text-slate-400 dark:text-zinc-500 tracking-widest flex items-center gap-1.5 leading-none mb-1">
+                    {Icon && <Icon size={12} />} {label}
+                </span>
+                <input
+                    type="number"
+                    step={step}
+                    value={value || ''}
+                    onChange={(e) => {
+                        const val = e.target.value;
+                        onChange(val === "" ? 0 : parseFloat(val));
+                    }}
+                    className={`w-full bg-transparent border-none text-center outline-none ${isSmall ? 'text-2xl' : 'text-4xl'} font-black italic text-slate-900 dark:text-white p-0 leading-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
+                />
+                <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-600 uppercase mt-1">{unit}</span>
+            </div>
+
+            <button
+                type="button"
+                onTouchStart={() => onHoldStart(step)} onTouchEnd={onHoldStop}
+                onMouseDown={() => onHoldStart(step)} onMouseUp={onHoldStop} onMouseLeave={onHoldStop}
+                className="w-12 h-12 flex items-center justify-center bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-2xl active:bg-[#CCFF00] active:text-black transition-all shrink-0 shadow-sm hover:bg-slate-200 dark:hover:bg-zinc-700"
+            >
+                <Plus size={20} />
+            </button>
+        </div>
+    )
+}
 
 export default function ProfilePage() {
     const [mounted, setMounted] = useState(false)
@@ -20,7 +75,9 @@ export default function ProfilePage() {
         chest: 100.0,
         bicepL: 35.0,
         bicepR: 35.0,
-        waterMeta: 3000
+        waterMeta: 3000,
+        gender: "M",
+        age: 25
     })
 
     const [history, setHistory] = useState<any[]>([])
@@ -52,7 +109,9 @@ export default function ProfilePage() {
                             chest: latest.chest || 100.0,
                             bicepL: latest.bicepL || 35.0,
                             bicepR: latest.bicepR || 35.0,
-                            waterMeta: data.user.waterGoal || 3000
+                            waterMeta: data.user.waterGoal || 3000,
+                            gender: data.user.gender || "M",
+                            age: data.user.age || 25
                         })
                         setHistory(data.history)
                     } else {
@@ -71,10 +130,30 @@ export default function ProfilePage() {
         initProfile()
     }, [])
 
+    // Helper: Water Calculation Logic
+    const calculateWater = (weight: number, age: number) => {
+        let multiplier = 35 // Adult Standard (18-54)
+        if (age <= 17) multiplier = 40 // Young
+        if (age >= 55) multiplier = 30 // Elderly
+        return Math.round(weight * multiplier)
+    }
+
     const updateValue = (key: string, step: number) => {
         setFormData(prev => {
             const val = Number((prev as any)[key]) || 0
-            return { ...prev, [key]: Math.max(0, parseFloat((val + step).toFixed(1))) }
+            const newVal = Math.max(0, parseFloat((val + step).toFixed(1)))
+
+            const updated = { ...prev, [key]: newVal }
+
+            // Auto-calculate water based on weight AND age
+            if (key === 'weight') {
+                updated.waterMeta = calculateWater(newVal, prev.age)
+            }
+            if (key === 'age') {
+                updated.waterMeta = calculateWater(prev.weight, newVal)
+            }
+
+            return updated
         })
     }
 
@@ -109,7 +188,10 @@ export default function ProfilePage() {
                 chest: formData.chest ? parseFloat(String(formData.chest)) : null,
                 bicepL: formData.bicepL ? parseFloat(String(formData.bicepL)) : null,
                 bicepR: formData.bicepR ? parseFloat(String(formData.bicepR)) : null,
-                waterMeta: formData.waterMeta ? parseInt(String(formData.waterMeta)) : 3000
+
+                waterMeta: formData.waterMeta ? parseInt(String(formData.waterMeta)) : 3000,
+                gender: formData.gender,
+                age: formData.age ? parseInt(String(formData.age)) : 25
             }
 
             // Debug Payload
@@ -165,44 +247,10 @@ export default function ProfilePage() {
         )
     }
 
-    const Control = ({ field, step, label, unit, icon: Icon, isSmall = false }: any) => (
-        <div className={`bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 p-4 rounded-[2rem] flex items-center justify-between shadow-soft ${isSmall ? 'py-4' : 'py-6'}`}>
-            <button
-                type="button"
-                onTouchStart={() => startHold(field, -step)} onTouchEnd={stopHold}
-                onMouseDown={() => startHold(field, -step)} onMouseUp={stopHold} onMouseLeave={stopHold}
-                className="w-12 h-12 flex items-center justify-center bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-2xl active:bg-red-500 active:text-white transition-all shrink-0 shadow-sm hover:bg-slate-200 dark:hover:bg-zinc-700"
-            >
-                <Minus size={20} />
-            </button>
+    // --- COMPONENTES EXTRAÍDOS ---
 
-            <div className="flex flex-col items-center flex-1 px-2">
-                <span className="text-[10px] font-black uppercase text-slate-400 dark:text-zinc-500 tracking-widest flex items-center gap-1.5 leading-none mb-1">
-                    {Icon && <Icon size={12} />} {label}
-                </span>
-                <input
-                    type="number"
-                    step={step}
-                    value={(formData as any)[field]}
-                    onChange={(e) => {
-                        const val = parseFloat(e.target.value);
-                        setFormData(prev => ({ ...prev, [field]: isNaN(val) ? 0 : parseFloat(val.toFixed(1)) }));
-                    }}
-                    className={`w-full bg-transparent border-none text-center outline-none ${isSmall ? 'text-2xl' : 'text-4xl'} font-black italic text-slate-900 dark:text-white p-0 leading-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
-                />
-                <span className="text-[9px] font-bold text-slate-400 dark:text-zinc-600 uppercase mt-1">{unit}</span>
-            </div>
-
-            <button
-                type="button"
-                onTouchStart={() => startHold(field, step)} onTouchEnd={stopHold}
-                onMouseDown={() => startHold(field, step)} onMouseUp={stopHold} onMouseLeave={stopHold}
-                className="w-12 h-12 flex items-center justify-center bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-2xl active:bg-[#CCFF00] active:text-black transition-all shrink-0 shadow-sm hover:bg-slate-200 dark:hover:bg-zinc-700"
-            >
-                <Plus size={20} />
-            </button>
-        </div>
-    )
+    // Timer Logic Helpers (Passados para o componente ou usados via props de handler)
+    // Para simplificar, o componente Control receberá os handlers de evento já prontos.
 
     return (
         <div className={`min-h-screen bg-slate-50 dark:bg-black text-slate-900 dark:text-white font-sans selection:bg-[#CCFF00]/30 antialiased transition-colors duration-300`}>
@@ -216,9 +264,7 @@ export default function ProfilePage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button onClick={toggleTheme} className="p-3 bg-slate-100 dark:bg-zinc-900 text-slate-500 dark:text-zinc-400 rounded-xl transition-all border border-slate-200 dark:border-zinc-800 hover:text-[#CCFF00]">
-                        {theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}
-                    </button>
+
                     <button onClick={handleSave} className="p-3 bg-[#CCFF00] text-black rounded-xl hover:scale-105 active:scale-90 transition-all shadow-md shadow-[#CCFF00]/10 flex items-center gap-2">
                         <Save size={18} />
                         <span className="text-[10px] font-black uppercase hidden sm:inline">Salvar</span>
@@ -231,11 +277,94 @@ export default function ProfilePage() {
                     <div className="space-y-6">
                         <div className="flex items-center gap-2 px-1">
                             <div className="w-1.5 h-4 bg-[#CCFF00] rounded-full" />
+                            <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-zinc-500">Dados Pessoais</h2>
+                        </div>
+
+                        <div className="bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800 p-6 rounded-[2rem] flex flex-col gap-6 shadow-soft">
+                            {/* Sexo Selector */}
+                            <div className="flex flex-col gap-2">
+                                <span className="text-[10px] font-black uppercase text-slate-400 dark:text-zinc-500 tracking-widest">Sexo Biológico</span>
+                                <div className="grid grid-cols-2 gap-2 bg-slate-100 dark:bg-zinc-800/50 p-1.5 rounded-2xl">
+                                    <button
+                                        onClick={() => setFormData(prev => ({ ...prev, gender: "M" }))}
+                                        className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${(formData as any).gender === "M"
+                                            ? "bg-white dark:bg-zinc-700 text-black dark:text-white shadow-sm"
+                                            : "text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300"
+                                            }`}
+                                    >
+                                        Masculino
+                                    </button>
+                                    <button
+                                        onClick={() => setFormData(prev => ({ ...prev, gender: "F" }))}
+                                        className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${(formData as any).gender === "F"
+                                            ? "bg-white dark:bg-zinc-700 text-black dark:text-white shadow-sm"
+                                            : "text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300"
+                                            }`}
+                                    >
+                                        Feminino
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Idade Selector */}
+                            <div className="flex flex-col gap-2">
+                                <ProfileControl
+                                    value={(formData as any).age}
+                                    step={1}
+                                    label="Idade"
+                                    unit="anos"
+                                    onChange={(val) => {
+                                        setFormData(prev => {
+                                            let multiplier = 35
+                                            if (val <= 17) multiplier = 40
+                                            if (val >= 55) multiplier = 30
+                                            return {
+                                                ...prev,
+                                                age: val,
+                                                waterMeta: Math.round(prev.weight * multiplier)
+                                            }
+                                        })
+                                    }}
+                                    onHoldStart={(s) => startHold('age', s)}
+                                    onHoldStop={stopHold}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 px-1">
+                            <div className="w-1.5 h-4 bg-[#CCFF00] rounded-full" />
                             <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-zinc-500">Status Biométrico</h2>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Control field="weight" step={0.1} label="Peso Atual" unit="kg" />
-                            <Control field="height" step={0.1} label="Estatura" unit="cm" />
+                            <ProfileControl
+                                value={(formData as any).weight}
+                                step={0.1}
+                                label="Peso Atual"
+                                unit="kg"
+                                onChange={(val) => {
+                                    setFormData(prev => {
+                                        let multiplier = 35
+                                        if (prev.age <= 17) multiplier = 40
+                                        if (prev.age >= 55) multiplier = 30
+                                        return {
+                                            ...prev,
+                                            weight: val,
+                                            waterMeta: Math.round(val * multiplier)
+                                        }
+                                    })
+                                }}
+                                onHoldStart={(s) => startHold('weight', s)}
+                                onHoldStop={stopHold}
+                            />
+                            <ProfileControl
+                                value={(formData as any).height}
+                                step={0.1}
+                                label="Estatura"
+                                unit="cm"
+                                onChange={(val) => setFormData(prev => ({ ...prev, height: val }))}
+                                onHoldStart={(s) => startHold('height', s)}
+                                onHoldStop={stopHold}
+                            />
                         </div>
 
                         {/* Meta de Hidratação Card */}
@@ -260,7 +389,11 @@ export default function ProfilePage() {
                                     type="number"
                                     step="100"
                                     value={formData.waterMeta}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, waterMeta: parseInt(e.target.value) || 0 }))}
+                                    onChange={(e) => {
+                                        // Fix: Allow typing by not aggressive parsing on every keystroke if empty
+                                        const val = e.target.value;
+                                        setFormData(prev => ({ ...prev, waterMeta: val === "" ? 0 : parseInt(val) }));
+                                    }}
                                     className="w-full bg-transparent border-none text-center outline-none text-5xl font-black italic text-slate-900 dark:text-white leading-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none tabular-nums"
                                 />
                                 <p className="text-[10px] font-bold text-blue-500/50 uppercase mt-1 tracking-widest">Mililitros</p>
@@ -282,10 +415,31 @@ export default function ProfilePage() {
                             <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-zinc-500">Medidas Corporais</h2>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Control field="waist" step={0.1} label="Cintura" unit="cm" isSmall icon={Ruler} />
-                            <Control field="chest" step={0.1} label="Peitoral" unit="cm" isSmall />
-                            <Control field="bicepL" step={0.1} label="Bíceps Esq." unit="cm" isSmall />
-                            <Control field="bicepR" step={0.1} label="Bíceps Dir." unit="cm" isSmall />
+                            <ProfileControl
+                                value={(formData as any).waist} step={0.1} label="Cintura" unit="cm"
+                                isSmall icon={Ruler}
+                                onChange={(val) => setFormData(prev => ({ ...prev, waist: val }))}
+                                onHoldStart={(s) => startHold('waist', s)}
+                                onHoldStop={stopHold}
+                            />
+                            <ProfileControl
+                                value={(formData as any).chest} step={0.1} label="Peitoral" unit="cm" isSmall
+                                onChange={(val) => setFormData(prev => ({ ...prev, chest: val }))}
+                                onHoldStart={(s) => startHold('chest', s)}
+                                onHoldStop={stopHold}
+                            />
+                            <ProfileControl
+                                value={(formData as any).bicepL} step={0.1} label="Bíceps Esq." unit="cm" isSmall
+                                onChange={(val) => setFormData(prev => ({ ...prev, bicepL: val }))}
+                                onHoldStart={(s) => startHold('bicepL', s)}
+                                onHoldStop={stopHold}
+                            />
+                            <ProfileControl
+                                value={(formData as any).bicepR} step={0.1} label="Bíceps Dir." unit="cm" isSmall
+                                onChange={(val) => setFormData(prev => ({ ...prev, bicepR: val }))}
+                                onHoldStart={(s) => startHold('bicepR', s)}
+                                onHoldStop={stopHold}
+                            />
                         </div>
 
                         <button onClick={handleSave} className="w-full bg-[#CCFF00] text-black py-6 rounded-[2.2rem] font-black text-sm uppercase flex items-center justify-center gap-4 active:scale-95 transition-all shadow-xl shadow-[#CCFF00]/10 group mt-6 hover:shadow-[#CCFF00]/20 hover:scale-[1.02]">
@@ -293,25 +447,59 @@ export default function ProfilePage() {
                         </button>
                     </div>
 
+
                     {/* Histórico Visual */}
                     {history.length > 0 && (
                         <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-white/5">
                             <div className="flex items-center gap-2 px-1">
-                                <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Histórico Recente</h2>
+                                <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Histórico de Evolução</h2>
                             </div>
-                            <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-3xl p-4 space-y-2 max-h-60 overflow-y-auto shadow-inner custom-scrollbar">
-                                {history.map((h: any, i: number) => (
-                                    <div key={i} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-black/20 rounded-2xl hover:bg-slate-100 transition-colors">
-                                        <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-[#CCFF00] rounded-full" />
-                                            {new Date(h.date).toLocaleDateString()}
-                                        </span>
-                                        <div className="flex gap-4 items-center">
-                                            <span className="text-xs font-black text-slate-900 dark:text-white tabular-nums">{h.weight}kg</span>
-                                            {h.waist && <span className="text-[10px] font-bold text-slate-400 tabular-nums border-l border-slate-200 pl-3">{h.waist}cm</span>}
-                                        </div>
-                                    </div>
-                                ))}
+
+                            <div className="h-64 w-full bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-3xl p-4 shadow-inner">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart
+                                        data={[...history].reverse()} // Inverter para mostrar do mais antigo para o mais novo
+                                        margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#33333333" />
+                                        <XAxis
+                                            dataKey="date"
+                                            tickFormatter={(val) => new Date(val).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })}
+                                            tick={{ fontSize: 10, fill: '#888' }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                        />
+                                        <YAxis
+                                            domain={['auto', 'auto']}
+                                            tick={{ fontSize: 10, fill: '#888' }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{
+                                                backgroundColor: '#000',
+                                                border: 'none',
+                                                borderRadius: '8px',
+                                                fontSize: '12px',
+                                                color: '#fff'
+                                            }}
+                                            itemStyle={{ color: '#CCFF00' }}
+                                            labelStyle={{ color: '#888', marginBottom: '4px' }}
+                                            labelFormatter={(val) => new Date(val).toLocaleDateString()}
+                                            formatter={(value: any, name: any) => [`${value} ${name === 'weight' ? 'kg' : 'cm'}`, name === 'weight' ? 'Peso' : 'Cintura']}
+                                        />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="weight"
+                                            stroke="#CCFF00"
+                                            strokeWidth={3}
+                                            dot={{ fill: '#CCFF00', strokeWidth: 0, r: 4 }}
+                                            activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
+                                        />
+                                        {/* Opcional: Adicionar linha para cintura se houver dados consistentes */}
+                                        {/* <Line type="monotone" dataKey="waist" stroke="#888" strokeWidth={2} dot={false} /> */}
+                                    </LineChart>
+                                </ResponsiveContainer>
                             </div>
                         </div>
                     )}

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+// Forçando tipo para sempre ser light, mas mantendo compatibilidade de tipo se algo checar "dark"
 type Theme = "dark" | "light"
 
 type ThemeContextType = {
@@ -12,34 +13,19 @@ type ThemeContextType = {
 const ThemeContext = React.createContext<ThemeContextType | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-    const [theme, setTheme] = React.useState<Theme>("light")
+    // Estado fixo em light
+    const theme: Theme = "light"
 
     React.useEffect(() => {
-        // REQUISITO: Padrão Light (ignorar sistema operacional)
-        // Verifica apenas se o usuário já salvou 'dark' explicitamente
-        const saved = localStorage.getItem("theme_gg") as Theme
-
-        if (saved === "dark") {
-            setTheme("dark")
-            document.documentElement.classList.add("dark")
-        } else {
-            // Se não tiver salvo ou se for 'light', força Light
-            setTheme("light")
-            document.documentElement.classList.remove("dark")
-        }
+        // Ao montar, GARANTE que limpa qualquer classe dark residual do html
+        // E remove do localStorage para evitar flashes futuros
+        document.documentElement.classList.remove("dark")
+        localStorage.removeItem("theme_gg")
     }, [])
 
     const toggleTheme = () => {
-        const newTheme = theme === "light" ? "dark" : "light"
-        setTheme(newTheme)
-        localStorage.setItem("theme_gg", newTheme)
-
-        // Atualização imediata do DOM para refletir na UI
-        if (newTheme === "dark") {
-            document.documentElement.classList.add("dark")
-        } else {
-            document.documentElement.classList.remove("dark")
-        }
+        // No-op: Função desabilitada
+        console.log("Troca de tema desabilitada pelo administrador.")
     }
 
     return (

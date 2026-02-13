@@ -23,6 +23,9 @@ model User {
   targetDays    Int            @default(5)
   waterGoal     Int            @default(3000)
   createdAt     DateTime       @default(now())
+  gender        String?        @default("M") // M = Masculino, F = Feminino
+  age           Int?           @default(25)
+  profileCompleted Boolean     @default(false)
   
   // Relacionamentos
   dailyLogs     DailyLog[]

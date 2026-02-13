@@ -14,14 +14,14 @@ export async function POST(req: Request) {
         // Busca rápida apenas para validar existência
         const user = await prisma.user.findUnique({
             where: { username },
-            select: { role: true, teamId: true } // Otimizado
+            select: { role: true, teamId: true, waterGoal: true } // Otimizado
         })
 
         if (!user) {
             return NextResponse.json({ valid: false }, { status: 404 })
         }
 
-        return NextResponse.json({ valid: true, role: user.role, teamId: user.teamId })
+        return NextResponse.json({ valid: true, role: user.role, teamId: user.teamId, waterGoal: user.waterGoal })
 
     } catch (error) {
         console.error("User Check Error:", error)

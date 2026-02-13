@@ -43,7 +43,8 @@ export async function POST(req: Request) {
             user: {
                 username: user.username,
                 role: user.role,
-                teamId: user.teamId
+                teamId: user.teamId,
+                profileCompleted: user.profileCompleted || false
             }
         })
 

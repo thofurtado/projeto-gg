@@ -59,7 +59,11 @@ export default function AuthPage() {
         toast.success("Login realizado!")
         // Timeout para garantir que o toast apareça suave
         setTimeout(() => {
-          window.location.href = "/dashboard"
+          if (data.user.profileCompleted) {
+            window.location.href = "/dashboard"
+          } else {
+            window.location.href = "/perfil"
+          }
         }, 500)
 
       } else {
@@ -91,11 +95,11 @@ export default function AuthPage() {
         localStorage.setItem("user_gg", data.user.username)
         localStorage.setItem("user_role", data.user.role || 'MEMBER')
 
-        toast.success("Conta criada! Bem-vindo.")
+        toast.success("Conta criada! Vamos configurar seu perfil.")
 
-        // Redirecionamento
+        // Redirecionamento para cadastro de ficha
         setTimeout(() => {
-          window.location.href = "/dashboard"
+          window.location.href = "/perfil"
         }, 1000)
       }
     } catch (err) {
@@ -112,12 +116,7 @@ export default function AuthPage() {
     <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-black text-slate-900 dark:text-white p-6 font-sans selection:bg-[#CCFF00]/30 transition-colors duration-300">
 
       {/* Theme Toggle */}
-      <button
-        onClick={toggleTheme}
-        className="absolute top-6 right-6 p-3 rounded-full bg-white dark:bg-zinc-900 shadow-lg border border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 hover:text-[#CCFF00] dark:hover:text-[#CCFF00] transition-all"
-      >
-        {theme === 'dark' ? <Moon size={20} /> : <Sun size={20} />}
-      </button>
+
 
       <div className="w-full max-w-md bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800/50 p-8 rounded-[40px] shadow-2xl backdrop-blur-sm transition-all duration-300">
         <div className="text-center mb-10">

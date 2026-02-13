@@ -140,6 +140,8 @@ export default function DashboardPage() {
           body: JSON.stringify({ username: storedUser })
         })
 
+        let waterGoal = 3000;
+
         // CRUCIAL: Se der erro de rede (offline) ou 500, o fetch não joga erro (exceto network), 
         // mas res.ok será false.
 
@@ -150,6 +152,7 @@ export default function DashboardPage() {
             // Ou se respondeu 404
             throw new Error("AUTH_INVALID")
           }
+          if (data.waterGoal) waterGoal = data.waterGoal
         } else if (res.status === 404 || res.status === 401) {
           // Resposta explicita de não autorizado
           throw new Error("AUTH_INVALID")
@@ -162,7 +165,11 @@ export default function DashboardPage() {
         const currentDay = getWeekDayIndex()
         setDiaAtualDoSistema(currentDay)
         setDiaVisualizado(currentDay)
-        setUserData(prev => ({ ...prev, username: storedUser }))
+        setUserData(prev => ({
+          ...prev,
+          username: storedUser,
+          config: { metaAgua: waterGoal }
+        }))
 
         setMounted(true)
         setVerifyingSession(false)
@@ -412,9 +419,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={toggleTheme} className="p-3 bg-slate-100 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 active:scale-90 transition-all">
-            {theme === 'light' ? <Moon size={18} className="text-slate-600" /> : <Sun size={18} className="text-[#CCFF00]" />}
-          </button>
+
           <button
             onClick={() => {
               localStorage.removeItem("user_gg");

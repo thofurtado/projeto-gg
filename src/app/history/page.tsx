@@ -43,9 +43,7 @@ export default function HistoryPage() {
                     <HistoryIcon className="text-[#CCFF00]" size={24} />
                     <span className="text-xs font-black uppercase tracking-widest leading-none">Minha Jornada</span>
                 </div>
-                <button onClick={toggleTheme} className="p-2 bg-slate-100 dark:bg-zinc-900 rounded-xl">
-                    {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-                </button>
+
             </header>
 
             <main className="max-w-[600px] mx-auto pt-24 px-6 space-y-8">

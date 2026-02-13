@@ -215,9 +215,7 @@ export default function TeamPage() {
                 <div className="flex items-center gap-2">
                     {userRole === 'GUIDE' && <span className="text-[10px] bg-[#CCFF00] text-black px-2 py-1 rounded font-bold">GUIA</span>}
                     {userRole === 'ADMIN' && <span className="text-[10px] bg-red-500 text-white px-2 py-1 rounded font-bold">ADMIN</span>}
-                    <button onClick={toggleTheme} className="p-2 bg-slate-100 dark:bg-zinc-900 rounded-xl">
-                        {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-                    </button>
+
                 </div>
             </header>
 
