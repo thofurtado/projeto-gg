@@ -57,19 +57,46 @@ export default function AuthPage() {
         localStorage.setItem("user_role", data.user.role || 'MEMBER')
 
         toast.success("Login realizado!")
-        window.location.href = "/dashboard"
+        // Timeout para garantir que o toast apareça suave
+        setTimeout(() => {
+          window.location.href = "/dashboard"
+        }, 500)
 
       } else {
-        // REGISTRO (Simulação Local para novos users não seedados)
-        // Idealmente criaria rota /api/auth/register, mas para manter compatibilidade rápida 
-        // e não bloquear novos usuários comuns, podemos usar o storage local ou criar rota depois.
-        // O PROMPT focou em consertar o LOGIN dos Admins/Guias seedados.
-        // Vou manter a lógica de registro local antiga OU bloquear registro se for o caso.
-        // Como o prompt pede "Reescreva a Rota de Login", vou assumir que registro pode ficar como está
-        // ou redirecionar para um "Em breve".
-        // Manterei a lógica antiga de registro local por enquanto para não quebrar fluxo de novos usuários.
-        toast.error("Registro temporariamente desabilitado. Use contas Seed.")
-        // Ou implemento rota real de registro em outro passo.
+        // REGISTRO 
+        if (password !== confirmPassword) {
+          setLoading(false)
+          return toast.error("As senhas não conferem!")
+        }
+
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: payloadUser,
+            password
+          })
+        })
+
+        if (!res.ok) {
+          const err = await res.json()
+          toast.error(err.error || "Erro ao registrar")
+          setLoading(false)
+          return
+        }
+
+        const data = await res.json()
+
+        // Sucesso: Salvar sessão
+        localStorage.setItem("user_gg", data.user.username)
+        localStorage.setItem("user_role", data.user.role || 'MEMBER')
+
+        toast.success("Conta criada! Bem-vindo.")
+
+        // Redirecionamento
+        setTimeout(() => {
+          window.location.href = "/dashboard"
+        }, 1000)
       }
     } catch (err) {
       console.error(err)
