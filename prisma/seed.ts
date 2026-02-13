@@ -15,17 +15,15 @@ async function main() {
     const passwordLucas = await hash('29183', 10)
     const passwordJulio = await hash('93812', 10)
     const passwordThiago = await hash('18293', 10)
-    const passwordAna = await hash('56192', 10)
 
     // Definimos os usuários. Note que usamos "as const" ou strings diretas
     // caso o Enum Role ainda não esteja sendo reconhecido pelo editor.
     const users = [
         { username: 'thomas', password: passwordThomas, role: 'ADMIN' },
-        { username: 'yamiel', password: passwordYamiel, role: 'ADMIN' },
+        { username: 'yamiel', password: passwordYamiel, role: 'GUIDE' },
         { username: 'lucas', password: passwordLucas, role: 'GUIDE' },
         { username: 'julio', password: passwordJulio, role: 'GUIDE' },
         { username: 'thiago', password: passwordThiago, role: 'GUIDE' },
-        { username: 'ana', password: passwordAna, role: 'GUIDE' },
     ]
 
     for (const u of users) {
