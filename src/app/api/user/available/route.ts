@@ -6,7 +6,6 @@ export async function GET() {
     try {
         const availableUsers = await prisma.user.findMany({
             where: {
-                role: 'MEMBER',
                 teamId: null
             },
             select: {

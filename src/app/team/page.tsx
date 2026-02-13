@@ -66,8 +66,10 @@ export default function TeamPage() {
                 if (role === 'ADMIN') {
                     // Admin logic
                     await fetchAdminData(user)
-                    // Se estiver gerenciando um time, atualiza os dados dele também se possível
-                    // Simplificação: apenas recarrega lista geral e limpa modal se necessário (ou mantem e atualiza)
+                    if (data.hasTeam) {
+                        setTeamData(data)
+                    }
+                    // Default to ADMIN_DASH initially
                 } else if (data.hasTeam) {
                     setTeamData(data)
                     setViewState('TEAM_DASH')
@@ -227,7 +229,15 @@ export default function TeamPage() {
                         {/* ADMIN VIEW */}
                         {viewState === 'ADMIN_DASH' && (
                             <div className="space-y-6">
-                                <h1 className="text-2xl font-black italic uppercase">Todas as Equipes</h1>
+                                <div className="flex items-center justify-between">
+                                    <h1 className="text-2xl font-black italic uppercase">Todas as Equipes</h1>
+                                    <button
+                                        onClick={() => setViewState(teamData ? 'TEAM_DASH' : 'NO_TEAM')}
+                                        className="text-xs font-bold bg-[#CCFF00] text-black px-4 py-2 rounded-xl hover:scale-105 transition-transform shadow-md shadow-[#CCFF00]/20"
+                                    >
+                                        {teamData ? 'Minha Equipe' : 'Criar/Entrar Equipe'}
+                                    </button>
+                                </div>
                                 <div className="space-y-4">
                                     {adminTeams.map(t => (
                                         <div key={t.id} className="bg-white dark:bg-white/5 p-5 rounded-3xl border border-slate-200 dark:border-white/10 flex justify-between items-center group hover:border-[#CCFF00]/50 transition-all">
@@ -252,17 +262,25 @@ export default function TeamPage() {
                         {/* NO TEAM VIEW (GUIDE/MEMBER) */}
                         {viewState === 'NO_TEAM' && (
                             <div className="space-y-8 animate-in fade-in duration-500">
+                                {userRole === 'ADMIN' && (
+                                    <button
+                                        onClick={() => setViewState('ADMIN_DASH')}
+                                        className="w-full mb-4 py-3 bg-slate-100 dark:bg-white/10 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded-xl text-xs font-bold uppercase transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <Shield size={16} /> Voltar ao Painel Geral
+                                    </button>
+                                )}
                                 <div className="text-center space-y-2">
                                     <div className="w-20 h-20 bg-[#CCFF00]/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#CCFF00]/20">
                                         <Users size={40} className="text-[#CCFF00]" />
                                     </div>
                                     <h1 className="text-2xl font-black italic uppercase">Sem Equipe</h1>
                                     <p className="text-xs font-medium text-slate-400 max-w-[200px] mx-auto">
-                                        {userRole === 'GUIDE' ? 'Funde seu esquadrão agora.' : 'Aguarde ser adicionado por um Guia.'}
+                                        {(userRole === 'GUIDE' || userRole === 'ADMIN') ? 'Funde seu esquadrão agora.' : 'Aguarde ser adicionado por um Guia.'}
                                     </p>
                                 </div>
 
-                                {userRole === 'GUIDE' ? (
+                                {(userRole === 'GUIDE' || userRole === 'ADMIN') ? (
                                     <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-6 rounded-[2rem] shadow-lg">
                                         <div className="flex items-center gap-3 mb-4">
                                             <div className="p-2 bg-[#CCFF00] rounded-lg text-black"><Plus size={18} /></div>
@@ -310,6 +328,16 @@ export default function TeamPage() {
                                         <span className="text-[10px] font-bold text-[#CCFF00] uppercase">{teamData?.members?.length} Membros</span>
                                     </div>
                                 </div>
+
+                                {/* ADMIN NAV BACK */}
+                                {userRole === 'ADMIN' && (
+                                    <button
+                                        onClick={() => setViewState('ADMIN_DASH')}
+                                        className="w-full mb-4 py-3 bg-slate-100 dark:bg-white/10 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded-xl text-xs font-bold uppercase transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <Shield size={16} /> Voltar ao Painel Geral
+                                    </button>
+                                )}
 
                                 {/* GUIDE TOOLBOX - ADD MEMBER */}
                                 {(userRole === 'GUIDE' || userRole === 'ADMIN') && (
