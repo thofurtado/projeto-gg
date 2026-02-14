@@ -405,7 +405,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className={`min-h-screen bg-[#F8FAFC] dark:bg-[#121417] text-slate-900 dark:text-white font-sans transition-colors pb-32 ${theme}`}>
+    <div className={`min-h-[100dvh] bg-[#F8FAFC] dark:bg-[#121417] text-slate-900 dark:text-white font-sans transition-colors pb-32 ${theme}`}>
       {/* Placar Real-Time */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-[#121417]/90 backdrop-blur-3xl border-b border-slate-200 dark:border-white/5 px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex flex-col">
